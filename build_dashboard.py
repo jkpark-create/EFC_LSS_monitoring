@@ -749,6 +749,7 @@ HTML = r"""<!doctype html>
     .sales-status {
       padding: 10px 12px 14px;
       min-height: 333px;
+      overflow: auto;
     }
 
     .sales-status-summary {
@@ -785,7 +786,7 @@ HTML = r"""<!doctype html>
     }
 
     .sales-status-table {
-      min-width: 0;
+      min-width: 640px;
       font-size: 12px;
     }
 
@@ -802,7 +803,7 @@ HTML = r"""<!doctype html>
     }
 
     .sales-status-table .sales-name {
-      max-width: 92px;
+      max-width: 86px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -810,7 +811,7 @@ HTML = r"""<!doctype html>
     }
 
     .sales-gap-cell {
-      min-width: 92px;
+      min-width: 86px;
     }
 
     .sales-gap-text {
@@ -1205,8 +1206,8 @@ HTML = r"""<!doctype html>
           titleSuffix: "별 징수율", noData: "데이터 없음", noException: "예외 없음",
           bl: "BL", teu: "TEU", issue: "미/부분", category: "구분", status: "Status",
           bookingShipper: "Booking Shipper", salesperson: "영업사원", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
-          salespersonStatus: "영업사원", underCollected: "미/부분",
-          mappedRows: "매핑 rows", owners: "담당자", shortfall: "부족",
+          salespersonStatus: "영업사원", shipperCount: "업체수", issueShipperCount: "미/부분 업체",
+          mappedShippers: "업체수", owners: "담당자",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "구분",
@@ -1269,8 +1270,8 @@ HTML = r"""<!doctype html>
           titleSuffix: " Collection Rate", noData: "No data", noException: "No exception",
           bl: "BL", teu: "TEU", issue: "Missing/Partial", category: "Category", status: "Status",
           bookingShipper: "Booking Shipper", salesperson: "Salesperson", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
-          salespersonStatus: "Salesperson", underCollected: "Miss/Part",
-          mappedRows: "Mapped rows", owners: "Owners", shortfall: "Shortfall",
+          salespersonStatus: "Salesperson", shipperCount: "Shippers", issueShipperCount: "Miss/Part Shippers",
+          mappedShippers: "Shippers", owners: "Owners",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "Category",
@@ -1412,6 +1413,8 @@ HTML = r"""<!doctype html>
             labels,
             rows: 0,
             blSet: new Set(),
+            shipperSet: new Set(),
+            issueShipperSet: new Set(),
             qty20: 0,
             qty40: 0,
             teu: 0,
@@ -1431,13 +1434,17 @@ HTML = r"""<!doctype html>
         const item = map.get(key);
         item.rows += 1;
         item.blSet.add(row.bl);
+        if (row.bookingShipper) item.shipperSet.add(row.bookingShipper);
         item.qty20 += Number(row.qty20 || 0);
         item.qty40 += Number(row.qty40 || 0);
         item.teu += Number(row.teu || 0);
         item.expected += Number(row.expected || 0);
         item.actual += Number(row.actual || 0);
         item.gap += Number(row.gap || 0);
-        if (["미징수", "부분징수"].includes(row.status)) item.issueGap += Number(row.gap || 0);
+        if (["미징수", "부분징수"].includes(row.status)) {
+          item.issueGap += Number(row.gap || 0);
+          if (row.bookingShipper) item.issueShipperSet.add(row.bookingShipper);
+        }
         if (row.status === "미징수") item.missing += 1;
         if (row.status === "부분징수") item.partial += 1;
         if (row.status === "초과징수") item.over += 1;
@@ -1449,6 +1456,8 @@ HTML = r"""<!doctype html>
       return Array.from(map.values()).map(item => ({
         ...item,
         bl: item.blSet.size,
+        shippers: item.shipperSet.size,
+        issueShippers: item.issueShipperSet.size,
         rate: item.expected > 0 ? item.actual / item.expected : NaN,
         programText: Array.from(item.programs).join(", "),
         categoryText: Array.from(item.categories).slice(0, 3).join(", "),
@@ -1913,10 +1922,10 @@ HTML = r"""<!doctype html>
       }];
       const items = aggregate(sourceRows, groupers)
         .sort((a, b) => {
-          const aShortfall = Math.min(a.issueGap, 0);
-          const bShortfall = Math.min(b.issueGap, 0);
+          const aShortfall = Math.min(a.gap, 0);
+          const bShortfall = Math.min(b.gap, 0);
           if (aShortfall !== bShortfall) return aShortfall - bShortfall;
-          return (b.missing + b.partial) - (a.missing + a.partial);
+          return b.issueShippers - a.issueShippers;
         })
         .slice(0, 12);
 
@@ -1925,41 +1934,44 @@ HTML = r"""<!doctype html>
         return;
       }
 
-      const mappedRows = sourceRows.filter(row => row.salesperson).length;
+      const mappedShippers = new Set(sourceRows
+        .filter(row => row.salesperson && row.bookingShipper)
+        .map(row => row.bookingShipper)).size;
       const ownerCount = new Set(sourceRows.map(row => row.salesperson).filter(Boolean)).size;
-      const shortfall = sourceRows.reduce((sum, row) => {
-        return ["미징수", "부분징수"].includes(row.status) ? sum + Math.min(Number(row.gap || 0), 0) : sum;
-      }, 0);
-      const maxShortfall = Math.max(...items.map(item => Math.abs(Math.min(item.issueGap, 0))), 1);
+      const totalGap = sourceRows.reduce((sum, row) => sum + Number(row.gap || 0), 0);
+      const maxShortfall = Math.max(...items.map(item => Math.abs(Math.min(item.gap, 0))), 1);
 
       panel.innerHTML = `
         <div class="sales-status-summary">
-          <div><span>${escapeHtml(t().table.mappedRows)}</span><strong>${num(mappedRows)}</strong></div>
+          <div><span>${escapeHtml(t().table.mappedShippers)}</span><strong>${num(mappedShippers)}</strong></div>
           <div><span>${escapeHtml(t().table.owners)}</span><strong>${num(ownerCount)}</strong></div>
-          <div><span>${escapeHtml(t().table.shortfall)}</span><strong>${signedUsd(shortfall)}</strong></div>
+          <div><span>${escapeHtml(t().labels.gap)}</span><strong>${signedUsd(totalGap)}</strong></div>
         </div>
         <table class="sales-status-table">
           <thead>
             <tr>
               <th>${escapeHtml(t().table.salespersonStatus)}</th>
-              <th class="num">${escapeHtml(t().table.bl)}</th>
-              <th class="num">${escapeHtml(t().table.underCollected)}</th>
+              <th class="num">${escapeHtml(t().table.shipperCount)}</th>
+              <th class="num">${escapeHtml(t().table.issueShipperCount)}</th>
+              <th class="num">${escapeHtml(t().labels.expected)}</th>
+              <th class="num">${escapeHtml(t().labels.actual)}</th>
               <th class="num">${escapeHtml(t().labels.gap)}</th>
               <th class="num">${escapeHtml(t().labels.rate)}</th>
             </tr>
           </thead>
           <tbody>
             ${items.map(item => {
-              const issueCount = item.missing + item.partial;
-              const issueGap = Math.min(item.issueGap, 0);
-              const shortfallWidth = Math.min(100, Math.abs(issueGap) / maxShortfall * 100);
+              const displayGap = item.gap;
+              const shortfallWidth = Math.min(100, Math.abs(Math.min(displayGap, 0)) / maxShortfall * 100);
               return `
                 <tr>
                   <td class="sales-name" title="${escapeHtml(item.labels[0])}">${escapeHtml(item.labels[0])}</td>
-                  <td class="num">${num(item.bl)}</td>
-                  <td class="num">${num(issueCount)}</td>
+                  <td class="num">${num(item.shippers)}</td>
+                  <td class="num">${num(item.issueShippers)}</td>
+                  <td class="num">${usd(item.expected)}</td>
+                  <td class="num">${usd(item.actual)}</td>
                   <td class="num sales-gap-cell">
-                    <div class="sales-gap-text">${signedUsd(issueGap)}</div>
+                    <div class="sales-gap-text">${signedUsd(displayGap)}</div>
                     <div class="sales-gap-bar"><span style="width:${shortfallWidth}%"></span></div>
                   </td>
                   <td class="num">${pct(item.rate)}</td>
