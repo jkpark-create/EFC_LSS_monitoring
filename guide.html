@@ -371,7 +371,8 @@ document.addEventListener('DOMContentLoaded',function(){
   <ul>
     <li><strong>영업사원</strong>: -3W Booking Dashboard에서 POL + Booking Shipper code 기준으로 매핑된 <code>Salesman_POR</code>입니다.</li>
     <li><strong>업체수</strong>: 고유 <code>Booking Shipper code</code> 기준 업체 수입니다.</li>
-    <li><strong>미/부분 업체</strong>: 미징수 또는 부분징수 row가 있는 고유 <code>Booking Shipper code</code> 수입니다.</li>
+    <li><strong>미징수 업체</strong>: 미징수 row가 있는 고유 <code>Booking Shipper code</code> 수입니다.</li>
+    <li><strong>부분 업체</strong>: 부분징수 row가 있는 고유 <code>Booking Shipper code</code> 수입니다.</li>
     <li><strong>Tariff / 징수 / Gap / 징수율</strong>: 영업사원별 금액과 징수율을 비교하는 핵심 지표입니다.</li>
   </ul>
   <h3>BL Exception</h3>
@@ -389,7 +390,8 @@ document.addEventListener('DOMContentLoaded',function(){
   <ul>
     <li><strong>Salesperson</strong>: <code>Salesman_POR</code> mapped from the -3W Booking Dashboard by POL + Booking Shipper code.</li>
     <li><strong>Shippers</strong>: unique <code>Booking Shipper code</code> count.</li>
-    <li><strong>Missing/Partial Shippers</strong>: unique <code>Booking Shipper code</code> count with missing or partial rows.</li>
+    <li><strong>Missing Shippers</strong>: unique <code>Booking Shipper code</code> count with missing rows.</li>
+    <li><strong>Partial Shippers</strong>: unique <code>Booking Shipper code</code> count with partial rows.</li>
     <li><strong>Tariff / Actual / Gap / Rate</strong>: key amount and collection metrics by salesperson.</li>
   </ul>
   <h3>BL Exception</h3>

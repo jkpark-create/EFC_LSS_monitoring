@@ -1206,7 +1206,7 @@ HTML = r"""<!doctype html>
           titleSuffix: "별 징수율", noData: "데이터 없음", noException: "예외 없음",
           bl: "BL", teu: "TEU", issue: "미/부분", category: "구분", status: "Status",
           bookingShipper: "Booking Shipper", salesperson: "영업사원", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
-          salespersonStatus: "영업사원", shipperCount: "업체수", issueShipperCount: "미/부분 업체",
+          salespersonStatus: "영업사원", shipperCount: "업체수", missingShipperCount: "미징수 업체", partialShipperCount: "부분 업체",
           mappedShippers: "업체수", owners: "담당자",
         },
         tariffBasis: "Tariff Basis",
@@ -1270,7 +1270,7 @@ HTML = r"""<!doctype html>
           titleSuffix: " Collection Rate", noData: "No data", noException: "No exception",
           bl: "BL", teu: "TEU", issue: "Missing/Partial", category: "Category", status: "Status",
           bookingShipper: "Booking Shipper", salesperson: "Salesperson", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
-          salespersonStatus: "Salesperson", shipperCount: "Shippers", issueShipperCount: "Miss/Part Shippers",
+          salespersonStatus: "Salesperson", shipperCount: "Shippers", missingShipperCount: "Missing Shippers", partialShipperCount: "Partial Shippers",
           mappedShippers: "Shippers", owners: "Owners",
         },
         tariffBasis: "Tariff Basis",
@@ -1415,6 +1415,8 @@ HTML = r"""<!doctype html>
             blSet: new Set(),
             shipperSet: new Set(),
             issueShipperSet: new Set(),
+            missingShipperSet: new Set(),
+            partialShipperSet: new Set(),
             qty20: 0,
             qty40: 0,
             teu: 0,
@@ -1445,8 +1447,14 @@ HTML = r"""<!doctype html>
           item.issueGap += Number(row.gap || 0);
           if (row.bookingShipper) item.issueShipperSet.add(row.bookingShipper);
         }
-        if (row.status === "미징수") item.missing += 1;
-        if (row.status === "부분징수") item.partial += 1;
+        if (row.status === "미징수") {
+          item.missing += 1;
+          if (row.bookingShipper) item.missingShipperSet.add(row.bookingShipper);
+        }
+        if (row.status === "부분징수") {
+          item.partial += 1;
+          if (row.bookingShipper) item.partialShipperSet.add(row.bookingShipper);
+        }
         if (row.status === "초과징수") item.over += 1;
         if (row.status === "수량확인") item.check += 1;
         item.programs.add(row.program);
@@ -1458,6 +1466,8 @@ HTML = r"""<!doctype html>
         bl: item.blSet.size,
         shippers: item.shipperSet.size,
         issueShippers: item.issueShipperSet.size,
+        missingShippers: item.missingShipperSet.size,
+        partialShippers: item.partialShipperSet.size,
         rate: item.expected > 0 ? item.actual / item.expected : NaN,
         programText: Array.from(item.programs).join(", "),
         categoryText: Array.from(item.categories).slice(0, 3).join(", "),
@@ -1952,7 +1962,8 @@ HTML = r"""<!doctype html>
             <tr>
               <th>${escapeHtml(t().table.salespersonStatus)}</th>
               <th class="num">${escapeHtml(t().table.shipperCount)}</th>
-              <th class="num">${escapeHtml(t().table.issueShipperCount)}</th>
+              <th class="num">${escapeHtml(t().table.missingShipperCount)}</th>
+              <th class="num">${escapeHtml(t().table.partialShipperCount)}</th>
               <th class="num">${escapeHtml(t().labels.expected)}</th>
               <th class="num">${escapeHtml(t().labels.actual)}</th>
               <th class="num">${escapeHtml(t().labels.gap)}</th>
@@ -1967,7 +1978,8 @@ HTML = r"""<!doctype html>
                 <tr>
                   <td class="sales-name" title="${escapeHtml(item.labels[0])}">${escapeHtml(item.labels[0])}</td>
                   <td class="num">${num(item.shippers)}</td>
-                  <td class="num">${num(item.issueShippers)}</td>
+                  <td class="num">${num(item.missingShippers)}</td>
+                  <td class="num">${num(item.partialShippers)}</td>
                   <td class="num">${usd(item.expected)}</td>
                   <td class="num">${usd(item.actual)}</td>
                   <td class="num sales-gap-cell">
