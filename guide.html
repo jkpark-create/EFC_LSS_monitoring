@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFC/LSS Collection Dashboard Guide</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;background:#f6f7f4;color:#1d2521;line-height:1.7;font-size:14px;letter-spacing:0}
+.header{background:#17382c;color:#f8fbf8;padding:12px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15);border-bottom:4px solid #d4a12d}
+.header h1{font-size:18px;font-weight:780}
+.header-actions{display:flex;align-items:center;gap:10px}
+.header a{color:rgba(248,251,248,.84);text-decoration:none;font-size:13px}
+.header a:hover{color:#fff}
+.lang-btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.42);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:760}
+.container{max-width:960px;margin:0 auto;padding:24px}
+h2{color:#1f7a5b;font-size:21px;margin:32px 0 12px;padding-bottom:8px;border-bottom:2px solid #dceee7}
+h3{color:#1d2521;font-size:16px;margin:20px 0 8px}
+p{margin:8px 0}
+.card{background:#fff;border:1px solid #d9dfda;border-radius:8px;box-shadow:0 8px 22px rgba(29,37,33,.08);padding:20px;margin:16px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+th{background:#eaf4ef;padding:8px 10px;text-align:left;border:1px solid #d9dfda;font-weight:760;color:#31443a}
+td{padding:8px 10px;border:1px solid #d9dfda;vertical-align:top}
+tr:nth-child(even){background:#f8faf8}
+code{background:#eef1ef;padding:2px 6px;border-radius:4px;font-size:13px;color:#17382c}
+.tip{background:#eef8f3;border-left:4px solid #1f7a5b;padding:12px 16px;margin:12px 0;border-radius:0 6px 6px 0}
+.tip strong{color:#1f7a5b}
+.warn{background:#fff5dc;border-left:4px solid #d4a12d}
+ul,ol{margin:8px 0 8px 24px}
+li{margin:4px 0}
+.toc{background:#fff;border:1px solid #d9dfda;border-radius:8px;box-shadow:0 8px 22px rgba(29,37,33,.08);padding:16px 20px;margin:16px 0}
+.toc a{color:#1f7a5b;text-decoration:none}
+.toc ul{list-style:none;margin:0;padding:0;columns:2}
+.toc li{padding:4px 0;break-inside:avoid}
+.toc li::before{content:">";color:#1f7a5b;margin-right:8px}
+.anchor{display:block}
+.tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:760}
+.tag-ok{background:#dceee7;color:#1f7a5b}
+.tag-partial{background:#fff2cf;color:#916113}
+.tag-missing{background:#f7dddd;color:#c84747}
+.tag-over{background:#deebf8;color:#276fbf}
+.tag-check{background:#eee9ff;color:#6a5acd}
+.side-toc{position:fixed;top:64px;right:16px;width:230px;max-height:calc(100vh - 84px);overflow-y:auto;background:#fff;border:1px solid #d9dfda;border-radius:8px;box-shadow:0 8px 22px rgba(29,37,33,.1);padding:14px 16px;font-size:12.5px;z-index:50;opacity:0;pointer-events:none;transition:opacity .25s}
+.side-toc.visible{opacity:1;pointer-events:auto}
+.side-toc h4{font-size:11px;color:#69756f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:800}
+.side-toc ul{list-style:none;margin:0;padding:0}
+.side-toc li{padding:0;margin:0}
+.side-toc a{display:block;padding:4px 0 4px 10px;color:#69756f;text-decoration:none;border-left:2px solid transparent;transition:all .15s}
+.side-toc a:hover{color:#1f7a5b}
+.side-toc a.active{color:#1f7a5b;border-left-color:#1f7a5b;font-weight:760}
+@media(max-width:1199px){.side-toc{display:none}}
+@media(max-width:720px){.header{align-items:flex-start;gap:10px;flex-direction:column;padding:12px 16px}.container{padding:16px 12px}.toc ul{columns:1}table{font-size:12px}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1 class="ko">EFC/LSS Collection Dashboard 사용 가이드</h1>
+    <h1 class="en" style="display:none">EFC/LSS Collection Dashboard User Guide</h1>
+  </div>
+  <div class="header-actions">
+    <button onclick="toggleLang()" id="langBtn" class="lang-btn">EN</button>
+    <a href="index.html" class="ko">&larr; 돌아가기</a>
+    <a href="index.html" class="en" style="display:none">&larr; Back</a>
+  </div>
+</div>
+
+<nav class="side-toc" id="sideToc">
+  <h4 class="ko">목차</h4><h4 class="en" style="display:none">Contents</h4>
+  <ul class="ko">
+    <li><a href="#overview" data-id="overview">개요</a></li>
+    <li><a href="#login" data-id="login">Google 로그인</a></li>
+    <li><a href="#quickstart" data-id="quickstart">빠른 사용 순서</a></li>
+    <li><a href="#filters" data-id="filters">필터 사용법</a></li>
+    <li><a href="#filter-cases" data-id="filter-cases">필터 활용 예시</a></li>
+    <li><a href="#kpis" data-id="kpis">KPI 해석</a></li>
+    <li><a href="#drilldown" data-id="drilldown">테이블/드릴다운</a></li>
+    <li><a href="#exceptions" data-id="exceptions">차트/예외 BL</a></li>
+    <li><a href="#status" data-id="status">상태 기준</a></li>
+    <li><a href="#tariff" data-id="tariff">Tariff 기준</a></li>
+    <li><a href="#data-update" data-id="data-update">데이터 갱신</a></li>
+    <li><a href="#limitations" data-id="limitations">주의사항</a></li>
+    <li><a href="#faq" data-id="faq">FAQ</a></li>
+  </ul>
+  <ul class="en" style="display:none">
+    <li><a href="#overview" data-id="overview">Overview</a></li>
+    <li><a href="#login" data-id="login">Google Login</a></li>
+    <li><a href="#quickstart" data-id="quickstart">Quick Start</a></li>
+    <li><a href="#filters" data-id="filters">Filters</a></li>
+    <li><a href="#filter-cases" data-id="filter-cases">Filter Use Cases</a></li>
+    <li><a href="#kpis" data-id="kpis">KPI Reading</a></li>
+    <li><a href="#drilldown" data-id="drilldown">Tables/Drilldown</a></li>
+    <li><a href="#exceptions" data-id="exceptions">Charts/Exceptions</a></li>
+    <li><a href="#status" data-id="status">Status Rules</a></li>
+    <li><a href="#tariff" data-id="tariff">Tariff Basis</a></li>
+    <li><a href="#data-update" data-id="data-update">Data Updates</a></li>
+    <li><a href="#limitations" data-id="limitations">Cautions</a></li>
+    <li><a href="#faq" data-id="faq">FAQ</a></li>
+  </ul>
+</nav>
+
+<script>
+let lang = localStorage.getItem('efcLssGuideLang') || localStorage.getItem('lang') || 'ko';
+function toggleLang(){lang=lang==='ko'?'en':'ko';localStorage.setItem('efcLssGuideLang',lang);localStorage.setItem('lang',lang);applyLang();}
+function applyLang(){
+  document.documentElement.lang = lang;
+  document.querySelectorAll('.ko').forEach(el=>el.style.display=lang==='ko'?'':'none');
+  document.querySelectorAll('.en').forEach(el=>el.style.display=lang==='en'?'':'none');
+  document.getElementById('langBtn').textContent=lang==='ko'?'EN':'KO';
+}
+function scrollToAnchor(id){
+  var el=document.getElementById(id);
+  if(!el)return;
+  var target=el.nextElementSibling;
+  while(target&&getComputedStyle(target).display==='none')target=target.nextElementSibling;
+  if(target){
+    var y=target.getBoundingClientRect().top+window.pageYOffset-58;
+    window.scrollTo({top:y,behavior:'smooth'});
+  }
+}
+document.addEventListener('DOMContentLoaded',function(){
+  applyLang();
+  document.querySelectorAll('a[href^="#"]').forEach(function(a){
+    a.addEventListener('click',function(e){e.preventDefault();scrollToAnchor(this.getAttribute('href').substring(1));});
+  });
+  var sectionIds=['overview','login','quickstart','filters','filter-cases','kpis','drilldown','exceptions','status','tariff','data-update','limitations','faq'];
+  var sideToc=document.getElementById('sideToc');
+  var mainTocs=document.querySelectorAll('.container > .toc');
+  function updateSideToc(){
+    var show=false;
+    mainTocs.forEach(function(t){if(t.getBoundingClientRect().bottom<60)show=true;});
+    sideToc.classList.toggle('visible',show);
+    var current='';
+    for(var i=0;i<sectionIds.length;i++){
+      var el=document.getElementById(sectionIds[i]);
+      if(el&&el.getBoundingClientRect().top<=70)current=sectionIds[i];
+    }
+    sideToc.querySelectorAll('a[data-id]').forEach(function(a){a.classList.toggle('active',a.dataset.id===current);});
+  }
+  window.addEventListener('scroll',updateSideToc,{passive:true});
+  updateSideToc();
+});
+</script>
+
+<div class="container">
+
+<div class="toc ko"><h3>목차</h3><ul>
+  <li><a href="#overview">개요</a></li>
+  <li><a href="#login">Google 로그인</a></li>
+  <li><a href="#quickstart">빠른 사용 순서</a></li>
+  <li><a href="#filters">필터 사용법</a></li>
+  <li><a href="#filter-cases">필터 활용 예시</a></li>
+  <li><a href="#kpis">KPI 해석</a></li>
+  <li><a href="#drilldown">테이블/드릴다운</a></li>
+  <li><a href="#exceptions">Top Gap 차트 / BL Exception</a></li>
+  <li><a href="#status">상태 기준</a></li>
+  <li><a href="#tariff">Tariff 기준</a></li>
+  <li><a href="#data-update">ICC 데이터 갱신</a></li>
+  <li><a href="#limitations">데이터 주의사항</a></li>
+  <li><a href="#faq">FAQ</a></li>
+</ul></div>
+
+<div class="toc en" style="display:none"><h3>Contents</h3><ul>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#login">Google Login</a></li>
+  <li><a href="#quickstart">Quick Start</a></li>
+  <li><a href="#filters">Filters</a></li>
+  <li><a href="#filter-cases">Filter Use Cases</a></li>
+  <li><a href="#kpis">KPI Reading</a></li>
+  <li><a href="#drilldown">Tables and Drilldown</a></li>
+  <li><a href="#exceptions">Top Gap Chart / BL Exceptions</a></li>
+  <li><a href="#status">Status Rules</a></li>
+  <li><a href="#tariff">Tariff Basis</a></li>
+  <li><a href="#data-update">ICC Data Updates</a></li>
+  <li><a href="#limitations">Data Cautions</a></li>
+  <li><a href="#faq">FAQ</a></li>
+</ul></div>
+
+<span class="anchor" id="overview"></span>
+<h2 class="ko">개요</h2><h2 class="en" style="display:none">Overview</h2>
+<div class="card ko">
+  <p><strong>EFC/LSS Collection Dashboard</strong>는 ICC에서 받은 <code>DynamicList.CSV</code> 기준으로 EFC/LSS 타리프 대비 실제 징수 여부를 확인하는 모니터링 화면입니다.</p>
+  <ul>
+    <li><strong>EFC non-CN</strong>: 중국 외 기점 중 대상 목적지에 대해 EFC tariff 기대액과 실제 EFC 징수액을 비교합니다.</li>
+    <li><strong>LSS CN->JP</strong>: 중국 기점 일본 도착 건에 대해 LSS 인상분 기대액과 실제 LSS 징수액을 비교합니다.</li>
+    <li><strong>주요 목적</strong>: 미징수, 부분징수, 초과징수, 수량확인 건을 빠르게 찾고 BL 단위 후속 확인 대상을 정리하는 것입니다.</li>
+  </ul>
+  <div class="tip"><strong>추천 사용 방식:</strong> 먼저 Charge/Week/Status로 범위를 좁힌 뒤, Main Table에서 선적지 -> Lane -> 고객 순서로 내려가고, 마지막에 BL Exception에서 개별 BL을 확인합니다.</div>
+</div>
+<div class="card en" style="display:none">
+  <p><strong>EFC/LSS Collection Dashboard</strong> monitors actual EFC/LSS collection against tariff expectations using ICC's <code>DynamicList.CSV</code>.</p>
+  <ul>
+    <li><strong>EFC non-CN</strong>: compares expected EFC tariff vs actual EFC collection for eligible non-China origins.</li>
+    <li><strong>LSS CN->JP</strong>: compares expected LSS increase vs actual LSS collection for China-to-Japan shipments.</li>
+    <li><strong>Main objective</strong>: quickly identify missing, partial, over-collected, and quantity-check BLs for follow-up.</li>
+  </ul>
+  <div class="tip"><strong>Recommended workflow:</strong> narrow the scope with Charge/Week/Status, drill down from Origin to Lane to Customer in the Main Table, then review BL-level details in BL Exception.</div>
+</div>
+
+<span class="anchor" id="login"></span>
+<h2 class="ko">Google 로그인</h2><h2 class="en" style="display:none">Google Login</h2>
+<div class="card ko">
+  <p>대시보드 본문은 회사 Google 계정으로 로그인한 뒤 표시됩니다.</p>
+  <ol>
+    <li><code>Google 계정으로 로그인</code> 버튼을 누릅니다.</li>
+    <li>회사 계정을 선택하고 Google OAuth 동의를 완료합니다.</li>
+    <li>이메일 도메인이 <code>ekmtc.com</code>이면 대시보드 데이터가 표시됩니다.</li>
+    <li>상단 우측 사용자 이름을 누르면 로그아웃됩니다.</li>
+  </ol>
+  <div class="tip warn"><strong>참고:</strong> Google OAuth는 배포 URL인 <code>https://jkpark-create.github.io/EFC_LSS_monitoring/</code>에서 정상 동작합니다. 로컬 파일로 직접 열면 로그인 리디렉션이 동작하지 않습니다.</div>
+</div>
+<div class="card en" style="display:none">
+  <p>The dashboard body is displayed only after signing in with a company Google account.</p>
+  <ol>
+    <li>Click <code>Sign in with Google</code>.</li>
+    <li>Select your company account and complete the Google OAuth consent flow.</li>
+    <li>If the email domain is <code>ekmtc.com</code>, the dashboard data is shown.</li>
+    <li>Click your user name in the top-right header to log out.</li>
+  </ol>
+  <div class="tip warn"><strong>Note:</strong> Google OAuth works on the deployed URL, <code>https://jkpark-create.github.io/EFC_LSS_monitoring/</code>. It will not redirect correctly when opened as a local file.</div>
+</div>
+
+<span class="anchor" id="quickstart"></span>
+<h2 class="ko">빠른 사용 순서</h2><h2 class="en" style="display:none">Quick Start</h2>
+<div class="card ko">
+  <ol>
+    <li><strong>데이터 최신 여부 확인</strong>: 헤더의 source meta에서 대상 row 수와 no-O/F 제외 row 수를 확인합니다.</li>
+    <li><strong>Charge 선택</strong>: 전체, EFC, LSS 중 확인할 대상을 선택합니다.</li>
+    <li><strong>Week 선택</strong>: 특정 주차를 보려면 Week 필터에서 <code>W16</code>처럼 선택합니다. 전체 흐름을 보려면 <code>전체</code>를 유지합니다.</li>
+    <li><strong>Status 선택</strong>: 미징수/부분징수 중심으로 follow-up 대상을 먼저 좁힙니다.</li>
+    <li><strong>Origin/Destination/Search 조합</strong>: 국가, POL, POD, 고객명, BL, route 등을 이용해 상세 범위를 좁힙니다.</li>
+    <li><strong>BL Exception 확인</strong>: Gap 절대값이 큰 BL부터 확인하고 ICC 또는 원본 파일에서 원인을 대조합니다.</li>
+  </ol>
+</div>
+<div class="card en" style="display:none">
+  <ol>
+    <li><strong>Check data freshness</strong>: review the source meta in the header for target rows and skipped no-O/F rows.</li>
+    <li><strong>Select Charge</strong>: choose All, EFC, or LSS.</li>
+    <li><strong>Select Week</strong>: choose a week such as <code>W16</code> for a specific week, or keep <code>All</code> for the full data range.</li>
+    <li><strong>Select Status</strong>: start with Missing or Partial to focus follow-up work.</li>
+    <li><strong>Combine Origin/Destination/Search</strong>: narrow the view by country, POL, POD, customer, BL, route, and vessel.</li>
+    <li><strong>Review BL Exception</strong>: start from BLs with the largest absolute gap and reconcile with ICC/source data.</li>
+  </ol>
+</div>
+
+<span class="anchor" id="filters"></span>
+<h2 class="ko">필터 사용법</h2><h2 class="en" style="display:none">Filters</h2>
+<div class="card ko">
+  <table>
+    <tr><th>필터</th><th>설명</th><th>활용 팁</th></tr>
+    <tr><td>Charge</td><td><code>전체</code>, <code>EFC</code>, <code>LSS</code>를 전환합니다.</td><td>LSS CN->JP만 볼 때는 LSS를 선택하면 CN-JP 건만 남습니다.</td></tr>
+    <tr><td>Layer</td><td>Main Table 집계 단계를 <code>선적지</code>, <code>Lane</code>, <code>고객</code>으로 전환합니다.</td><td>행을 클릭하면 선적지 -> Lane -> 고객으로 드릴다운됩니다.</td></tr>
+    <tr><td>Origin</td><td>선적지 기준을 <code>POL</code> 또는 <code>국가</code>로 바꿉니다.</td><td>국가 단위 트렌드는 국가, 현장 follow-up은 POL이 편합니다.</td></tr>
+    <tr><td>Customer</td><td>고객 집계 기준을 <code>booking shipper</code> 또는 <code>handling consignee</code>로 바꿉니다.</td><td>선적 요청 주체는 Shipper, 정산/수하인 이슈는 CNEE 기준으로 봅니다.</td></tr>
+    <tr><td>Month</td><td><code>실적년</code> + <code>실적월</code> 기준 월 필터입니다.</td><td>다운로드 범위가 여러 달이면 특정 월만 분리할 수 있습니다.</td></tr>
+    <tr><td>Week</td><td><code>실적년주차</code> 기준 주차 필터입니다.</td><td>금주 16주만 볼 때 <code>W16</code>, 누적은 전체를 선택합니다.</td></tr>
+    <tr><td>P/C</td><td><code>p/c</code> 컬럼 기준 필터입니다.</td><td>Prepaid/Collect 성격 차이로 징수 패턴을 비교할 때 사용합니다.</td></tr>
+    <tr><td>Status</td><td>정상, 부분징수, 미징수, 초과징수, 수량확인, 수량없음 필터입니다.</td><td>follow-up은 미징수/부분징수/수량확인부터 보는 것이 효율적입니다.</td></tr>
+    <tr><td>선적지</td><td>선택된 Origin 기준에 맞춰 국가 또는 POL 목록이 표시됩니다.</td><td>Charge를 먼저 선택하면 해당 Charge의 선적지만 표시됩니다.</td></tr>
+    <tr><td>도착지</td><td>POD 기준 목적지 필터입니다.</td><td>EFC 목적지 tariff group과 실제 POD를 함께 확인할 때 사용합니다.</td></tr>
+    <tr><td>Search</td><td>BL, 고객, 국가, POL/POD, route, vessel, voyage, tariff category, status를 통합 검색합니다.</td><td>부분 문자열 검색이므로 BL 일부 또는 고객 코드 일부만 입력해도 됩니다.</td></tr>
+  </table>
+  <div class="tip"><strong>필터는 누적 적용됩니다.</strong> 예를 들어 Charge=LSS, Week=W16, Status=미징수, Search=SHA를 동시에 걸면 16주 SHA 관련 LSS 미징수 건만 남습니다.</div>
+</div>
+<div class="card en" style="display:none">
+  <table>
+    <tr><th>Filter</th><th>Description</th><th>Tip</th></tr>
+    <tr><td>Charge</td><td>Switches between <code>All</code>, <code>EFC</code>, and <code>LSS</code>.</td><td>Select LSS to isolate China-to-Japan LSS cases.</td></tr>
+    <tr><td>Layer</td><td>Changes the Main Table aggregation level: <code>Origin</code>, <code>Lane</code>, or <code>Customer</code>.</td><td>Click a row to drill from Origin to Lane to Customer.</td></tr>
+    <tr><td>Origin</td><td>Changes origin grouping between <code>POL</code> and <code>Country</code>.</td><td>Use Country for trend review and POL for operational follow-up.</td></tr>
+    <tr><td>Customer</td><td>Changes customer grouping between <code>booking shipper</code> and <code>handling consignee</code>.</td><td>Use Shipper for booking ownership and CNEE for consignee/settlement review.</td></tr>
+    <tr><td>Month</td><td>Filters by performance year-month.</td><td>Useful when the downloaded range spans multiple months.</td></tr>
+    <tr><td>Week</td><td>Filters by performance week.</td><td>Select <code>W16</code> for week 16 only, or All for cumulative view.</td></tr>
+    <tr><td>P/C</td><td>Filters by the <code>p/c</code> column.</td><td>Use this to compare prepaid vs collect collection behavior.</td></tr>
+    <tr><td>Status</td><td>Filters Normal, Partial, Missing, Over, Quantity Check, and No Quantity statuses.</td><td>For follow-up, start with Missing, Partial, and Quantity Check.</td></tr>
+    <tr><td>Origin Select</td><td>Lists countries or POLs depending on the Origin basis.</td><td>Select Charge first to reduce the origin list to relevant values.</td></tr>
+    <tr><td>Destination</td><td>Filters by POD.</td><td>Use with tariff category to verify destination tariff mapping.</td></tr>
+    <tr><td>Search</td><td>Searches BL, customer, country, POL/POD, route, vessel, voyage, tariff category, and status.</td><td>Partial search works, so a BL prefix or customer code fragment is enough.</td></tr>
+  </table>
+  <div class="tip"><strong>Filters are cumulative.</strong> For example, Charge=LSS, Week=W16, Status=Missing, and Search=SHA leaves only week-16 SHA-related missing LSS cases.</div>
+</div>
+
+<span class="anchor" id="filter-cases"></span>
+<h2 class="ko">필터 활용 예시</h2><h2 class="en" style="display:none">Filter Use Cases</h2>
+<div class="card ko">
+  <table>
+    <tr><th>업무 목적</th><th>권장 필터 조합</th><th>확인 포인트</th></tr>
+    <tr><td>금주 미징수 BL 확인</td><td>Week=<code>W16</code>, Status=<code>미징수</code></td><td>BL Exception에서 Gap 큰 순서로 확인합니다.</td></tr>
+    <tr><td>CN->JP LSS 누락 확인</td><td>Charge=<code>LSS</code>, Status=<code>미징수</code> 또는 <code>부분징수</code></td><td>LSS actual이 0인지, 수량이 맞는지 확인합니다.</td></tr>
+    <tr><td>EFC 목적지별 리스크 확인</td><td>Charge=<code>EFC</code>, Layer=<code>Lane</code>, Sort=<code>Gap</code></td><td>Gap이 큰 목적지/POD부터 원인을 봅니다.</td></tr>
+    <tr><td>고객별 follow-up 리스트 작성</td><td>Layer=<code>고객</code>, Customer=<code>Shipper</code>, Status=<code>부분징수</code>/<code>미징수</code></td><td>동일 고객 반복 여부를 확인합니다.</td></tr>
+    <tr><td>P/C별 징수 패턴 비교</td><td>P/C=<code>P</code> 또는 <code>C</code>, Status=<code>전체</code></td><td>징수율과 미/부분 row 수를 비교합니다.</td></tr>
+    <tr><td>특정 BL 또는 화주 확인</td><td>Search에 BL 일부, 고객 코드, route, vessel 입력</td><td>다른 필터가 걸려 있으면 결과가 숨겨질 수 있으니 필요 시 전체로 돌립니다.</td></tr>
+  </table>
+</div>
+<div class="card en" style="display:none">
+  <table>
+    <tr><th>Purpose</th><th>Recommended Filters</th><th>What to Check</th></tr>
+    <tr><td>Find current-week missing BLs</td><td>Week=<code>W16</code>, Status=<code>Missing</code></td><td>Start from the largest gaps in BL Exception.</td></tr>
+    <tr><td>Check CN->JP LSS gaps</td><td>Charge=<code>LSS</code>, Status=<code>Missing</code> or <code>Partial</code></td><td>Verify whether actual LSS is zero and whether quantities are correct.</td></tr>
+    <tr><td>Review EFC destination risk</td><td>Charge=<code>EFC</code>, Layer=<code>Lane</code>, Sort=<code>Gap</code></td><td>Investigate high-gap lanes/PODs first.</td></tr>
+    <tr><td>Prepare customer follow-up list</td><td>Layer=<code>Customer</code>, Customer=<code>Shipper</code>, Status=<code>Partial</code>/<code>Missing</code></td><td>Check whether the same customer repeats.</td></tr>
+    <tr><td>Compare P/C collection behavior</td><td>P/C=<code>P</code> or <code>C</code>, Status=<code>All</code></td><td>Compare collection rate and under-collected row count.</td></tr>
+    <tr><td>Find a specific BL or customer</td><td>Type a BL fragment, customer code, route, or vessel in Search</td><td>Reset other filters if the expected row is hidden.</td></tr>
+  </table>
+</div>
+
+<span class="anchor" id="kpis"></span>
+<h2 class="ko">KPI 해석</h2><h2 class="en" style="display:none">KPI Reading</h2>
+<div class="card ko">
+  <table>
+    <tr><th>KPI</th><th>의미</th><th>계산/해석</th></tr>
+    <tr><td>징수율</td><td>Tariff 기대액 대비 실제 징수액 비율</td><td><code>실제 징수액 / Tariff 기대액</code>. 95~105%는 정상 범위로 판단합니다.</td></tr>
+    <tr><td>Tariff 기대액</td><td>타리프 기준으로 받아야 할 금액</td><td><code>20갯수 * 20DRY tariff + 40갯수 * 40DRY tariff</code></td></tr>
+    <tr><td>실제 징수액</td><td>원본에 입력된 실제 EFC 또는 LSS 합계</td><td>EFC는 <code>20 efc + 40 efc</code>, LSS는 <code>20 lss + 40 lss</code></td></tr>
+    <tr><td>Gap</td><td>기대액과 실제액 차이</td><td><code>Tariff 기대액 - 실제 징수액</code>. 양수는 부족, 음수는 초과징수입니다.</td></tr>
+    <tr><td>대상 BL</td><td>필터 후 남은 고유 BL 수</td><td>같은 BL이 여러 row로 나뉘어도 BL 수는 중복 제거됩니다.</td></tr>
+    <tr><td>TEU</td><td>필터 후 대상 TEU 합계</td><td>원본 <code>전체 teu</code> 합계입니다.</td></tr>
+  </table>
+</div>
+<div class="card en" style="display:none">
+  <table>
+    <tr><th>KPI</th><th>Meaning</th><th>Calculation / Reading</th></tr>
+    <tr><td>Collection Rate</td><td>Actual collection vs tariff expectation</td><td><code>Actual / Expected</code>. 95-105% is treated as normal.</td></tr>
+    <tr><td>Tariff Expected</td><td>Amount expected by tariff</td><td><code>20 qty * 20DRY tariff + 40 qty * 40DRY tariff</code></td></tr>
+    <tr><td>Actual Collection</td><td>Actual EFC or LSS amount from the source</td><td>EFC: <code>20 efc + 40 efc</code>, LSS: <code>20 lss + 40 lss</code></td></tr>
+    <tr><td>Gap</td><td>Difference between expected and actual</td><td><code>Expected - Actual</code>. Positive means shortfall; negative means over-collected.</td></tr>
+    <tr><td>Target BL</td><td>Unique BL count after filtering</td><td>Duplicate BL rows are counted once.</td></tr>
+    <tr><td>TEU</td><td>Total TEU after filtering</td><td>Sum of source <code>전체 teu</code>.</td></tr>
+  </table>
+</div>
+
+<span class="anchor" id="drilldown"></span>
+<h2 class="ko">테이블/드릴다운</h2><h2 class="en" style="display:none">Tables and Drilldown</h2>
+<div class="card ko">
+  <h3>Main Table</h3>
+  <ul>
+    <li><strong>선적지 레벨</strong>: 국가 또는 POL 기준으로 전체 Gap과 징수율을 비교합니다.</li>
+    <li><strong>Lane 레벨</strong>: 선적지-도착지 조합으로 어느 lane에서 누락이 많은지 확인합니다.</li>
+    <li><strong>고객 레벨</strong>: 특정 lane 안에서 booking shipper 또는 handling consignee별로 follow-up 대상을 확인합니다.</li>
+  </ul>
+  <h3>행 클릭</h3>
+  <p>선적지 행을 클릭하면 해당 선적지의 lane으로 이동하고, lane 행을 클릭하면 고객 레벨로 이동합니다. Breadcrumb의 <code>전체</code> 또는 선적지 버튼을 누르면 상위 레벨로 돌아갑니다.</p>
+  <h3>정렬</h3>
+  <p>컬럼 헤더를 클릭하면 해당 컬럼 기준으로 오름차순/내림차순 정렬됩니다. 상단 Sort 버튼의 <code>Gap</code>, <code>Tariff</code>, <code>징수율</code>은 Top Gap 차트 정렬 기준에도 영향을 줍니다.</p>
+</div>
+<div class="card en" style="display:none">
+  <h3>Main Table</h3>
+  <ul>
+    <li><strong>Origin level</strong>: compares gap and collection rate by country or POL.</li>
+    <li><strong>Lane level</strong>: identifies high-gap origin-destination combinations.</li>
+    <li><strong>Customer level</strong>: shows follow-up targets by booking shipper or handling consignee within a lane.</li>
+  </ul>
+  <h3>Row Click</h3>
+  <p>Click an origin row to move to lane level, then click a lane row to move to customer level. Use the breadcrumb buttons to return to a higher level.</p>
+  <h3>Sorting</h3>
+  <p>Click table headers to sort ascending/descending. The top Sort buttons, <code>Gap</code>, <code>Tariff</code>, and <code>Collection Rate</code>, also control the Top Gap chart ranking.</p>
+</div>
+
+<span class="anchor" id="exceptions"></span>
+<h2 class="ko">Top Gap 차트 / BL Exception</h2><h2 class="en" style="display:none">Top Gap Chart / BL Exceptions</h2>
+<div class="card ko">
+  <h3>Top Gap</h3>
+  <p>현재 필터와 Layer 기준으로 상위 12개 항목을 보여줍니다. 막대는 선택한 Sort 기준의 상대 크기이며, 진한 녹색 막대는 기대액 대비 실제 징수액의 상대 수준을 나타냅니다.</p>
+  <h3>BL Exception</h3>
+  <p><code>정상</code>과 <code>수량없음</code>을 제외한 BL 중 Gap 절대값이 큰 순서로 최대 120건을 표시합니다.</p>
+  <ul>
+    <li><strong>Status</strong>: 원인 분류를 빠르게 볼 수 있는 색상 pill입니다.</li>
+    <li><strong>BL / Charge / POL / POD</strong>: ICC 또는 원본 파일에서 대조할 핵심 키입니다.</li>
+    <li><strong>20 / 40 / Tariff / 징수 / Gap</strong>: 수량과 금액의 불일치 원인을 찾는 기본 컬럼입니다.</li>
+    <li><strong>Tariff Cat.</strong>: 적용된 tariff group입니다. 목적지와 group이 맞는지 확인합니다.</li>
+  </ul>
+</div>
+<div class="card en" style="display:none">
+  <h3>Top Gap</h3>
+  <p>Shows the top 12 items based on the current filters and Layer. The bar length represents the selected Sort metric, and the dark green segment indicates actual collection relative to expected amount.</p>
+  <h3>BL Exception</h3>
+  <p>Shows up to 120 non-normal BL rows, excluding <code>Normal</code> and <code>No Quantity</code>, sorted by absolute gap.</p>
+  <ul>
+    <li><strong>Status</strong>: colored pill for quick issue classification.</li>
+    <li><strong>BL / Charge / POL / POD</strong>: key fields for ICC/source reconciliation.</li>
+    <li><strong>20 / 40 / Tariff / Actual / Gap</strong>: primary columns to explain quantity and amount mismatch.</li>
+    <li><strong>Tariff Cat.</strong>: applied tariff group. Verify whether it matches the destination.</li>
+  </ul>
+</div>
+
+<span class="anchor" id="status"></span>
+<h2 class="ko">상태 기준</h2><h2 class="en" style="display:none">Status Rules</h2>
+<div class="card ko">
+  <table>
+    <tr><th>Status</th><th>기준</th><th>업무상 의미</th></tr>
+    <tr><td><span class="tag tag-ok">정상</span></td><td>실제 징수액이 기대액의 95~105% 범위</td><td>추가 확인 우선순위가 낮습니다.</td></tr>
+    <tr><td><span class="tag tag-missing">미징수</span></td><td>기대액은 있으나 실제 징수액이 0 이하</td><td>최우선 follow-up 대상입니다.</td></tr>
+    <tr><td><span class="tag tag-partial">부분징수</span></td><td>실제 징수액이 기대액의 95% 미만</td><td>할인, 누락, 수량 차이를 확인합니다.</td></tr>
+    <tr><td><span class="tag tag-over">초과징수</span></td><td>실제 징수액이 기대액의 105% 초과</td><td>중복 징수 또는 tariff 적용 차이를 확인합니다.</td></tr>
+    <tr><td><span class="tag tag-check">수량확인</span></td><td>기대액은 0인데 실제 징수액이 있음</td><td>20/40 수량 누락 또는 원본 수량 컬럼을 확인합니다.</td></tr>
+    <tr><td>수량없음</td><td>기대액도 실제액도 0</td><td>Exception 목록에서는 제외됩니다.</td></tr>
+  </table>
+</div>
+<div class="card en" style="display:none">
+  <table>
+    <tr><th>Status</th><th>Rule</th><th>Business Meaning</th></tr>
+    <tr><td><span class="tag tag-ok">Normal</span></td><td>Actual is within 95-105% of expected amount</td><td>Low follow-up priority.</td></tr>
+    <tr><td><span class="tag tag-missing">Missing</span></td><td>Expected amount exists but actual collection is zero or below</td><td>Highest follow-up priority.</td></tr>
+    <tr><td><span class="tag tag-partial">Partial</span></td><td>Actual is below 95% of expected amount</td><td>Check discount, missing charge, or quantity difference.</td></tr>
+    <tr><td><span class="tag tag-over">Over</span></td><td>Actual exceeds 105% of expected amount</td><td>Check duplicate collection or tariff basis difference.</td></tr>
+    <tr><td><span class="tag tag-check">Quantity Check</span></td><td>Expected is zero while actual collection exists</td><td>Check missing 20/40 quantity or source quantity fields.</td></tr>
+    <tr><td>No Quantity</td><td>Both expected and actual are zero</td><td>Excluded from the Exception list.</td></tr>
+  </table>
+</div>
+
+<span class="anchor" id="tariff"></span>
+<h2 class="ko">Tariff 기준</h2><h2 class="en" style="display:none">Tariff Basis</h2>
+<div class="card ko">
+  <table>
+    <tr><th>구분</th><th>대상</th><th>20 DRY</th><th>40 DRY</th></tr>
+    <tr><td>LSS CN->JP</td><td>origin country=CN, destination country=JP</td><td>USD 150</td><td>USD 300</td></tr>
+    <tr><td>EFC JAPAN</td><td>destination country=JP</td><td>USD 60</td><td>USD 120</td></tr>
+    <tr><td>EFC CHINA/HK/TAIWAN</td><td>destination country=CN/HK/TW</td><td>USD 40</td><td>USD 80</td></tr>
+    <tr><td>EFC SOUTH EAST ASIA</td><td>TH/VN/ID/MY/SG/PH/KH/MM</td><td>USD 40</td><td>USD 80</td></tr>
+    <tr><td>EFC INDIA/PAKISTAN (ISC)</td><td>IN/PK/LK/BD</td><td>USD 160</td><td>USD 320</td></tr>
+    <tr><td>EFC MIDDLE EAST</td><td>AE/OM/SA/BH/KW</td><td>USD 160</td><td>USD 320</td></tr>
+    <tr><td>EFC RED SEA</td><td>EG/JO 또는 JED/AQJ/SKN</td><td>USD 200</td><td>USD 400</td></tr>
+    <tr><td>EFC AFRICA / MEXICO</td><td>TZ/KE 또는 MX</td><td>USD 200</td><td>USD 400</td></tr>
+  </table>
+  <div class="tip warn"><strong>EFC 대상 제외 origin:</strong> origin country가 빈 값, CN, KR, JP, US인 EFC 건은 대상에서 제외됩니다. 단, CN->JP는 LSS 기준으로 별도 대상화됩니다.</div>
+</div>
+<div class="card en" style="display:none">
+  <table>
+    <tr><th>Category</th><th>Target</th><th>20 DRY</th><th>40 DRY</th></tr>
+    <tr><td>LSS CN->JP</td><td>origin country=CN, destination country=JP</td><td>USD 150</td><td>USD 300</td></tr>
+    <tr><td>EFC JAPAN</td><td>destination country=JP</td><td>USD 60</td><td>USD 120</td></tr>
+    <tr><td>EFC CHINA/HK/TAIWAN</td><td>destination country=CN/HK/TW</td><td>USD 40</td><td>USD 80</td></tr>
+    <tr><td>EFC SOUTH EAST ASIA</td><td>TH/VN/ID/MY/SG/PH/KH/MM</td><td>USD 40</td><td>USD 80</td></tr>
+    <tr><td>EFC INDIA/PAKISTAN (ISC)</td><td>IN/PK/LK/BD</td><td>USD 160</td><td>USD 320</td></tr>
+    <tr><td>EFC MIDDLE EAST</td><td>AE/OM/SA/BH/KW</td><td>USD 160</td><td>USD 320</td></tr>
+    <tr><td>EFC RED SEA</td><td>EG/JO or JED/AQJ/SKN</td><td>USD 200</td><td>USD 400</td></tr>
+    <tr><td>EFC AFRICA / MEXICO</td><td>TZ/KE or MX</td><td>USD 200</td><td>USD 400</td></tr>
+  </table>
+  <div class="tip warn"><strong>EFC excluded origins:</strong> EFC rows are excluded when origin country is blank, CN, KR, JP, or US. CN->JP is handled separately under LSS.</div>
+</div>
+
+<span class="anchor" id="data-update"></span>
+<h2 class="ko">ICC 데이터 갱신</h2><h2 class="en" style="display:none">ICC Data Updates</h2>
+<div class="card ko">
+  <h3>ICC 다운로드 조건</h3>
+  <table>
+    <tr><th>항목</th><th>설정값</th></tr>
+    <tr><td>Document Name</td><td><code>[영업팀] LSS &amp; EFC 징수금액조회</code></td></tr>
+    <tr><td>시작년주</td><td>최근 4개 주 기준 시작 주차. 예: <code>202613</code></td></tr>
+    <tr><td>종료년주</td><td>ICC 금주. 2026-04-21 기준 금주가 16주이면 <code>202616</code></td></tr>
+    <tr><td>조직</td><td><code>O</code></td></tr>
+    <tr><td>구분</td><td><code>D</code></td></tr>
+  </table>
+  <h3>자동 갱신 흐름</h3>
+  <ol>
+    <li>ICC에서 조건을 입력하고 Excel Down을 실행합니다.</li>
+    <li>다운로드 파일을 <code>DynamicList.CSV</code>로 변환/교체합니다.</li>
+    <li><code>build_dashboard.py</code>가 <code>index.html</code>, <code>dashboard.html</code>, <code>data.json</code>을 다시 생성합니다.</li>
+  </ol>
+  <p>수동으로 이미 받은 파일만 반영할 때는 <code>.\run_icc_daily_update.ps1 -DownloadFile ".\downloads\DynamicList.xlsx"</code> 형식으로 실행할 수 있습니다. 로그인 후 화면은 <code>data.json</code>을 fetch해서 렌더링합니다.</p>
+</div>
+<div class="card en" style="display:none">
+  <h3>ICC Download Conditions</h3>
+  <table>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Document Name</td><td><code>[영업팀] LSS &amp; EFC 징수금액조회</code></td></tr>
+    <tr><td>Start Year-Week</td><td>Start week for the latest 4-week window. Example: <code>202613</code></td></tr>
+    <tr><td>End Year-Week</td><td>Current ICC week. If current week is week 16 as of 2026-04-21, use <code>202616</code></td></tr>
+    <tr><td>Organization</td><td><code>O</code></td></tr>
+    <tr><td>Division</td><td><code>D</code></td></tr>
+  </table>
+  <h3>Auto Update Flow</h3>
+  <ol>
+    <li>Enter the ICC conditions and run Excel Down.</li>
+    <li>Convert/replace the downloaded file as <code>DynamicList.CSV</code>.</li>
+    <li><code>build_dashboard.py</code> rebuilds <code>index.html</code>, <code>dashboard.html</code>, and <code>data.json</code>.</li>
+  </ol>
+  <p>To apply an already downloaded file manually, run <code>.\run_icc_daily_update.ps1 -DownloadFile ".\downloads\DynamicList.xlsx"</code>. After login, the page fetches <code>data.json</code> and renders the dashboard.</p>
+</div>
+
+<span class="anchor" id="limitations"></span>
+<h2 class="ko">데이터 주의사항</h2><h2 class="en" style="display:none">Data Cautions</h2>
+<div class="card ko">
+  <ul>
+    <li><strong>O/F 없는 행 제외</strong>: <code>20 o/f</code>와 <code>40 o/f</code>가 모두 빈칸 또는 0이면 모수에서 제외합니다.</li>
+    <li><strong>합계 행 제외</strong>: 원본 마지막 합계 행처럼 실적년/월이 없는 행은 자동 제외합니다.</li>
+    <li><strong>효력일 기준</strong>: 원본에 ETD POL 일자가 없으므로 행 단위 효력일 제외는 적용하지 않습니다.</li>
+    <li><strong>RF/RH 할증</strong>: 원본에 RF/RH 여부 컬럼이 없어 50% 할증은 계산에 반영하지 않습니다.</li>
+    <li><strong>수량확인</strong>: 기대액 0인데 실제 징수액이 있는 경우, tariff 오류라기보다 20/40 수량 누락 가능성이 있으므로 원본 수량부터 확인합니다.</li>
+  </ul>
+</div>
+<div class="card en" style="display:none">
+  <ul>
+    <li><strong>No-O/F rows excluded</strong>: rows with both <code>20 o/f</code> and <code>40 o/f</code> blank or zero are excluded.</li>
+    <li><strong>Total row excluded</strong>: rows without performance year/month, such as source total rows, are skipped automatically.</li>
+    <li><strong>Effective date</strong>: row-level effective-date exclusion is not applied because the source has no ETD POL date.</li>
+    <li><strong>RF/RH uplift</strong>: 50% RF/RH uplift is not applied because the source has no refrigerated cargo flag.</li>
+    <li><strong>Quantity Check</strong>: when expected is zero but actual exists, check missing 20/40 quantity first before treating it as tariff error.</li>
+  </ul>
+</div>
+
+<span class="anchor" id="faq"></span>
+<h2 class="ko">FAQ</h2><h2 class="en" style="display:none">FAQ</h2>
+<div class="card ko">
+  <h3>Q. 징수율이 100%를 넘는 것은 오류인가요?</h3>
+  <p>반드시 오류는 아닙니다. 실제 징수액이 기대액보다 5% 초과하면 <code>초과징수</code>로 표시하며, 중복 징수, tariff 적용 차이, 수량 차이를 확인해야 합니다.</p>
+  <h3>Q. Search로 BL을 입력했는데 안 보입니다.</h3>
+  <p>다른 필터가 함께 적용되어 숨겨졌을 수 있습니다. Charge, Week, Status, 선적지, 도착지를 <code>전체</code>로 돌린 뒤 다시 검색합니다.</p>
+  <h3>Q. 선적지 필터 목록이 예상보다 적습니다.</h3>
+  <p>Charge 필터가 먼저 적용됩니다. 예를 들어 LSS를 선택하면 CN->JP 대상 선적지만 남습니다.</p>
+  <h3>Q. 고객 기준 Shipper와 CNEE는 언제 바꾸나요?</h3>
+  <p>부킹 주체별 follow-up은 Shipper, 수하인/정산 주체별 패턴 확인은 CNEE가 더 적합합니다.</p>
+</div>
+<div class="card en" style="display:none">
+  <h3>Q. Is a collection rate above 100% always an error?</h3>
+  <p>Not necessarily. When actual exceeds expected by more than 5%, it is marked as <code>Over</code>. Check duplicate collection, tariff basis difference, or quantity mismatch.</p>
+  <h3>Q. I searched a BL but cannot find it.</h3>
+  <p>Other filters may be hiding it. Reset Charge, Week, Status, Origin, and Destination to <code>All</code>, then search again.</p>
+  <h3>Q. Why is the origin filter list shorter than expected?</h3>
+  <p>The Charge filter is applied first. For example, selecting LSS leaves only CN->JP target origins.</p>
+  <h3>Q. When should I switch Customer from Shipper to CNEE?</h3>
+  <p>Use Shipper for booking-owner follow-up, and CNEE for consignee or settlement-pattern review.</p>
+</div>
+
+</div>
+</body>
+</html>

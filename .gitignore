@@ -2,3 +2,8 @@ DynamicList.CSV
 *.CSV
 dashboard.html
 .DS_Store
+downloads/
+.icc-browser/
+*.bak
+*.xlsx
+*.xls

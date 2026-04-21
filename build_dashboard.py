@@ -8,6 +8,8 @@ from pathlib import Path
 
 SOURCE_CSV = Path("DynamicList.CSV")
 OUTPUT_FILES = (Path("index.html"), Path("dashboard.html"))
+DATA_FILE = Path("data.json")
+SOURCE_ENCODINGS = ("cp949", "utf-8-sig", "utf-8")
 
 EFC_EXCLUDED_ORIGINS = {"", "CN", "KR", "JP", "US"}
 SOUTH_EAST_ASIA = {"TH", "VN", "ID", "MY", "SG", "PH", "KH", "MM"}
@@ -58,6 +60,26 @@ def efc_destination_rule(dest_country: str, dest_port: str) -> tuple[str, int, i
     return None
 
 
+def detect_source_encoding(path: Path) -> str:
+    required_headers = {"실적년", "실적월", "실적년주차"}
+    first_valid_encoding = SOURCE_ENCODINGS[0]
+
+    for encoding in SOURCE_ENCODINGS:
+        try:
+            with path.open("r", encoding=encoding, newline="") as f:
+                reader = csv.reader(f)
+                headers = next(reader, [])
+        except UnicodeDecodeError:
+            continue
+
+        if headers and first_valid_encoding == SOURCE_ENCODINGS[0]:
+            first_valid_encoding = encoding
+        if required_headers <= set(headers):
+            return encoding
+
+    return first_valid_encoding
+
+
 def status_for(expected: float, actual: float) -> str:
     if expected <= 0 and actual > 0:
         return "수량확인"
@@ -78,7 +100,7 @@ def read_rows() -> tuple[list[dict], dict]:
     skipped_no_freight = 0
     raw_rows = 0
 
-    with SOURCE_CSV.open("r", encoding="cp949", newline="") as f:
+    with SOURCE_CSV.open("r", encoding=detect_source_encoding(SOURCE_CSV), newline="") as f:
         reader = csv.DictReader(f)
         for row_no, row in enumerate(reader, start=2):
             raw_rows += 1
@@ -228,6 +250,102 @@ HTML = r"""<!doctype html>
       letter-spacing: 0;
     }
 
+    .login-wrap {
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      padding: 24px;
+    }
+
+    .login-box {
+      width: min(420px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px;
+      text-align: center;
+    }
+
+    .login-box h2 {
+      margin: 0;
+      color: var(--green);
+      font-size: 22px;
+      font-weight: 820;
+    }
+
+    .login-box p {
+      margin: 8px 0 22px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .login-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 42px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--green);
+      color: #fff;
+      padding: 0 18px;
+      font: inherit;
+      font-weight: 760;
+      cursor: pointer;
+    }
+
+    .login-button:hover {
+      background: #186448;
+    }
+
+    .login-error {
+      display: none;
+      margin: 14px 0 0;
+      color: var(--red);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .login-help {
+      margin-top: 14px;
+      font-size: 13px;
+    }
+
+    .login-help a {
+      color: var(--green);
+      font-weight: 760;
+      text-decoration: none;
+    }
+
+    .login-help a:hover {
+      text-decoration: underline;
+    }
+
+    .app-shell {
+      display: none;
+    }
+
+    .app-message {
+      margin-bottom: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+      color: var(--muted);
+      font-weight: 760;
+    }
+
+    .app-message.error {
+      color: var(--red);
+      border-color: #e6b5b5;
+      background: #fff8f8;
+    }
+
     header {
       background: #17382c;
       color: #f8fbf8;
@@ -235,11 +353,63 @@ HTML = r"""<!doctype html>
       border-bottom: 4px solid #d4a12d;
     }
 
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
     header h1 {
       margin: 0;
       font-size: 24px;
       font-weight: 780;
       letter-spacing: 0;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .header-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 30px;
+      border: 1px solid rgba(248, 251, 248, 0.38);
+      border-radius: 6px;
+      padding: 0 12px;
+      background: rgba(248, 251, 248, 0.12);
+      color: #f8fbf8;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .header-link:hover {
+      background: rgba(248, 251, 248, 0.2);
+    }
+
+    .header-user {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      border: 0;
+      background: transparent;
+      color: rgba(248, 251, 248, 0.78);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 720;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .header-user:hover {
+      color: #fff;
     }
 
     header .sub {
@@ -566,6 +736,7 @@ HTML = r"""<!doctype html>
 
     @media (max-width: 720px) {
       header { padding: 18px 16px 14px; }
+      .header-top { align-items: flex-start; flex-direction: column; }
       main { padding: 14px 12px 22px; }
       .toolbar { grid-template-columns: 1fr; }
       .control.small, .control.medium, .control.large { grid-column: span 1; }
@@ -577,17 +748,44 @@ HTML = r"""<!doctype html>
   </style>
 </head>
 <body>
-  <header>
-    <h1>EFC/LSS Tariff Collection Monitor</h1>
-    <div class="sub">
-      <span id="sourceMeta"></span>
-      <span>CN→JP LSS USD 150/300</span>
-      <span>EFC DRY tariff basis</span>
+  <div class="login-wrap" id="login">
+    <div class="login-box">
+      <h2>EFC/LSS Collection Dashboard</h2>
+      <p>회사 Google 계정으로 로그인하면 데이터를 볼 수 있습니다.</p>
+      <button class="login-button" onclick="doLogin()">
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Google 계정으로 로그인
+      </button>
+      <div class="login-help"><a href="guide.html">사용가이드 보기</a></div>
+      <p class="login-error" id="loginErr"></p>
     </div>
-  </header>
+  </div>
 
-  <main>
-    <section class="toolbar" aria-label="filters">
+  <div id="app" class="app-shell">
+    <header>
+      <div class="header-top">
+        <h1>EFC/LSS Tariff Collection Monitor</h1>
+        <div class="header-actions">
+          <a class="header-link" href="guide.html">Guide</a>
+          <button class="header-user" id="userInfo" onclick="logout()"></button>
+        </div>
+      </div>
+      <div class="sub">
+        <span id="sourceMeta"></span>
+        <span>CN→JP LSS USD 150/300</span>
+        <span>EFC DRY tariff basis</span>
+      </div>
+    </header>
+
+    <main>
+      <div class="app-message" id="loading">데이터 로딩 중...</div>
+
+      <section class="toolbar" aria-label="filters">
       <div class="control large">
         <label>Charge</label>
         <div class="segmented" data-segment="program">
@@ -646,9 +844,9 @@ HTML = r"""<!doctype html>
         <label>Search</label>
         <input id="searchFilter" type="search" placeholder="BL / 고객 / Port / Route">
       </div>
-    </section>
+      </section>
 
-    <section class="kpis">
+      <section class="kpis">
       <div class="metric">
         <div class="label">징수율</div>
         <div class="value" id="kpiRate">-</div>
@@ -679,9 +877,9 @@ HTML = r"""<!doctype html>
         <div class="value" id="kpiTeu">-</div>
         <div class="delta" id="kpiTeuDelta">-</div>
       </div>
-    </section>
+      </section>
 
-    <section class="grid">
+      <section class="grid">
       <div class="panel">
         <div class="panel-head">
           <div>
@@ -705,9 +903,9 @@ HTML = r"""<!doctype html>
         </div>
         <div class="chart" id="gapChart"></div>
       </div>
-    </section>
+      </section>
 
-    <section class="grid">
+      <section class="grid">
       <div class="panel">
         <div class="panel-head">
           <div class="panel-title">BL Exception</div>
@@ -743,14 +941,20 @@ HTML = r"""<!doctype html>
           </div>
         </div>
       </div>
-    </section>
-  </main>
+      </section>
+    </main>
+  </div>
 
-  <script id="dashboard-data" type="application/json">__DATA__</script>
   <script>
-    const payload = JSON.parse(document.getElementById("dashboard-data").textContent);
-    const rows = payload.rows;
-    const meta = payload.meta;
+    const DATA_URL = "data.json";
+    const GOOGLE_CLIENT_ID = "409330651463-giie223egsskdq10etn642gjtron1hq5.apps.googleusercontent.com";
+    const ALLOWED_DOMAINS = ["ekmtc.com"];
+    const SCOPES = "email profile openid";
+    let rows = [];
+    let meta = {};
+    let gToken = null;
+    let gUser = null;
+    let appInitialized = false;
 
     const state = {
       program: "ALL",
@@ -964,6 +1168,142 @@ HTML = r"""<!doctype html>
       return String(value ?? "").replace(/[&<>"']/g, ch => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
       }[ch]));
+    }
+
+    function setLoginError(message) {
+      const element = document.getElementById("loginErr");
+      element.textContent = message;
+      element.style.display = message ? "block" : "none";
+    }
+
+    function authRedirectUri() {
+      const url = new URL(location.href);
+      url.hash = "";
+      url.search = "";
+      url.pathname = url.pathname.replace(/[^/]*$/, "");
+      return url.toString();
+    }
+
+    function doLogin() {
+      if (location.protocol === "file:") {
+        setLoginError("Google 로그인은 GitHub Pages URL에서 실행해야 합니다.");
+        return;
+      }
+
+      const authUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
+        "?client_id=" + encodeURIComponent(GOOGLE_CLIENT_ID) +
+        "&redirect_uri=" + encodeURIComponent(authRedirectUri()) +
+        "&response_type=token" +
+        "&scope=" + encodeURIComponent(SCOPES) +
+        "&include_granted_scopes=true" +
+        "&prompt=select_account";
+      location.href = authUrl;
+    }
+
+    function handleRedirect() {
+      const hash = location.hash.substring(1);
+      if (!hash) return false;
+
+      const params = new URLSearchParams(hash);
+      const token = params.get("access_token");
+      if (!token) return false;
+
+      history.replaceState(null, "", location.pathname + location.search);
+      fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+        headers: { Authorization: "Bearer " + token },
+      })
+        .then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        })
+        .then(info => {
+          const domain = (info.email || "").split("@")[1] || "";
+          if (ALLOWED_DOMAINS.length && !ALLOWED_DOMAINS.includes(domain.toLowerCase())) {
+            setLoginError(`${domain || "Unknown"} 도메인은 접근할 수 없습니다.`);
+            return;
+          }
+
+          gToken = token;
+          gUser = { email: info.email, name: info.name, picture: info.picture };
+          sessionStorage.setItem("efcLssGoogleToken", token);
+          sessionStorage.setItem("efcLssGoogleUser", JSON.stringify(gUser));
+          showApp();
+        })
+        .catch(error => {
+          setLoginError("사용자 정보 확인 실패: " + error.message);
+        });
+      return true;
+    }
+
+    function checkSession() {
+      if (handleRedirect()) return;
+
+      const token = sessionStorage.getItem("efcLssGoogleToken");
+      const user = sessionStorage.getItem("efcLssGoogleUser");
+      if (!token || !user) return;
+
+      gToken = token;
+      try {
+        gUser = JSON.parse(user);
+      } catch {
+        sessionStorage.removeItem("efcLssGoogleToken");
+        sessionStorage.removeItem("efcLssGoogleUser");
+        return;
+      }
+
+      fetch("https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=" + encodeURIComponent(token))
+        .then(response => {
+          if (response.ok) showApp();
+          else logout(false);
+        })
+        .catch(() => logout(false));
+    }
+
+    function logout(reload = true) {
+      sessionStorage.removeItem("efcLssGoogleToken");
+      sessionStorage.removeItem("efcLssGoogleUser");
+      gToken = null;
+      gUser = null;
+      if (reload) location.reload();
+    }
+
+    async function loadData() {
+      const loading = document.getElementById("loading");
+      loading.classList.remove("error");
+      loading.style.display = "block";
+      loading.textContent = "데이터 로딩 중...";
+
+      try {
+        const response = await fetch(`${DATA_URL}?t=${Date.now()}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        rows = payload.rows || [];
+        meta = payload.meta || {};
+        loading.style.display = "none";
+      } catch (error) {
+        loading.classList.add("error");
+        loading.textContent = "데이터 로드 실패: " + error.message;
+        throw error;
+      }
+    }
+
+    function showApp() {
+      setLoginError("");
+      document.getElementById("login").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      const userName = gUser?.name || gUser?.email || "User";
+      document.getElementById("userInfo").textContent = `${userName} | 로그아웃`;
+
+      if (!appInitialized) {
+        loadData()
+          .then(() => {
+            setupFilters();
+            syncSegments();
+            render();
+            appInitialized = true;
+          })
+          .catch(() => {});
+      }
     }
 
     function setupFilters() {
@@ -1271,9 +1611,7 @@ HTML = r"""<!doctype html>
       render();
     });
 
-    setupFilters();
-    syncSegments();
-    render();
+    checkSession();
   </script>
 </body>
 </html>
@@ -1287,10 +1625,11 @@ def main() -> None:
     rows, meta = read_rows()
     data = json.dumps({"rows": rows, "meta": meta}, ensure_ascii=False, separators=(",", ":"))
     data = data.replace("</", "<\\/")
-    html = HTML.replace("__DATA__", data)
+    DATA_FILE.write_text(data, encoding="utf-8")
+    html = HTML
     for output_file in OUTPUT_FILES:
         output_file.write_text(html, encoding="utf-8")
-    print(f"Wrote {', '.join(str(path) for path in OUTPUT_FILES)} with {len(rows):,} target rows")
+    print(f"Wrote {', '.join(str(path) for path in (*OUTPUT_FILES, DATA_FILE))} with {len(rows):,} target rows")
     print(json.dumps(meta, ensure_ascii=False, indent=2))
 
 
