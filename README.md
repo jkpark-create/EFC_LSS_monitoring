@@ -63,11 +63,13 @@ ICC 화면을 열어 다운로드까지 실행하려면 사내 ICC URL을 넘겨
 py .\icc_daily_update.py --date 2026-04-21 --dry-run
 ```
 
-Windows 작업 스케줄러에 매일 걸 때는 예를 들어 아래처럼 등록합니다.
+Windows 작업 스케줄러에는 매일 오전 8시와 오후 1시에 실행되도록 아래 명령으로 등록합니다. `-Deploy` 옵션을 사용하면 `index.html`, `data.json` 변경분을 커밋하고 GitHub Pages로 푸시합니다.
 
 ```powershell
-schtasks /Create /TN "EFC LSS ICC Update" /SC DAILY /ST 08:30 /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"C:\Users\JKPARK\OneDrive\Documents\Claude\EFC_LSS_monitoring\run_icc_daily_update.ps1`" -Url `"https://ICC_ON_DEMAND_DATA_URL`" -Headless"
+.\register_icc_update_schedule.ps1 -Url "https://ICC_ON_DEMAND_DATA_URL"
 ```
+
+스케줄 실행 로그는 `logs/icc_daily_update_YYYYMMDD_HHMMSS.log`에 저장됩니다. ICC URL을 환경변수로 관리할 경우 `ICC_URL`을 사용자 환경변수로 등록한 뒤 `.\register_icc_update_schedule.ps1`만 실행해도 됩니다.
 
 ICC 화면의 입력 컨트롤이 일반 HTML 입력이 아닌 커스텀 위젯이면 selector 환경변수로 직접 지정할 수 있습니다. 시작/종료년주가 한 칸이면 `ICC_SELECTOR_START`, `ICC_SELECTOR_END`에 각각 `202613`, `202616` 형태로 입력하고, 두 칸이면 `ICC_SELECTOR_START_YEAR`, `ICC_SELECTOR_START_WEEK`, `ICC_SELECTOR_END_YEAR`, `ICC_SELECTOR_END_WEEK`를 사용합니다. 그 외 예: `ICC_SELECTOR_ORG`, `ICC_SELECTOR_DIVISION`, `ICC_SELECTOR_DOCUMENT`, `ICC_SELECTOR_EXCEL_DOWN`.
 

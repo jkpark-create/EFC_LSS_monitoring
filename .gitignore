@@ -4,6 +4,7 @@ dashboard.html
 .DS_Store
 downloads/
 .icc-browser/
+logs/
 *.bak
 *.xlsx
 *.xls

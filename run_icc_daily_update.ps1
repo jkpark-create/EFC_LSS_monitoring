@@ -1,24 +1,80 @@
 param(
     [string]$Url = $env:ICC_URL,
     [switch]$Headless,
-    [string]$DownloadFile
+    [string]$DownloadFile,
+    [switch]$Deploy,
+    [switch]$NoLog
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
 
-$arguments = @(".\icc_daily_update.py")
-
-if ($Url) {
-    $arguments += @("--url", $Url)
+$logPath = $null
+if (-not $NoLog) {
+    $logDir = Join-Path $PSScriptRoot "logs"
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    $logPath = Join-Path $logDir ("icc_daily_update_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    Start-Transcript -Path $logPath -Append | Out-Null
 }
 
-if ($Headless) {
-    $arguments += "--headless"
-}
+try {
+    Write-Host ("ICC daily update started at {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))
 
-if ($DownloadFile) {
-    $arguments += @("--download-file", $DownloadFile)
-}
+    $arguments = @(".\icc_daily_update.py")
 
-py @arguments
+    if ($Url) {
+        $arguments += @("--url", $Url)
+    }
+
+    if ($Headless) {
+        $arguments += "--headless"
+    }
+
+    if ($DownloadFile) {
+        $arguments += @("--download-file", $DownloadFile)
+    }
+
+    py @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "icc_daily_update.py failed with exit code $LASTEXITCODE"
+    }
+
+    if ($Deploy) {
+        Write-Host "Deploy option enabled. Committing and pushing dashboard data when changed."
+
+        git add index.html data.json
+        if ($LASTEXITCODE -ne 0) {
+            throw "git add failed with exit code $LASTEXITCODE"
+        }
+
+        git diff --cached --quiet -- index.html data.json
+        $diffExit = $LASTEXITCODE
+
+        if ($diffExit -eq 1) {
+            $message = "Update ICC dashboard data " + (Get-Date -Format "yyyy-MM-dd HH:mm")
+            git commit -m $message
+            if ($LASTEXITCODE -ne 0) {
+                throw "git commit failed with exit code $LASTEXITCODE"
+            }
+
+            git push origin main
+            if ($LASTEXITCODE -ne 0) {
+                throw "git push failed with exit code $LASTEXITCODE"
+            }
+        } elseif ($diffExit -eq 0) {
+            Write-Host "No index.html/data.json changes to deploy."
+        } else {
+            throw "git diff failed with exit code $diffExit"
+        }
+    }
+
+    Write-Host ("ICC daily update completed at {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))
+} catch {
+    Write-Error $_
+    exit 1
+} finally {
+    if ($logPath) {
+        Stop-Transcript | Out-Null
+        Write-Host "Log written to $logPath"
+    }
+}
