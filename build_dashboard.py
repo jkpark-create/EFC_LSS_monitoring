@@ -1,0 +1,1290 @@
+from __future__ import annotations
+
+import csv
+import json
+from collections import Counter
+from pathlib import Path
+
+
+SOURCE_CSV = Path("DynamicList.CSV")
+OUTPUT_FILES = (Path("index.html"), Path("dashboard.html"))
+
+EFC_EXCLUDED_ORIGINS = {"", "CN", "KR", "JP", "US"}
+SOUTH_EAST_ASIA = {"TH", "VN", "ID", "MY", "SG", "PH", "KH", "MM"}
+ISC = {"IN", "PK", "LK", "BD"}
+MIDDLE_EAST = {"AE", "OM", "SA", "BH", "KW"}
+RED_SEA_COUNTRIES = {"EG", "JO"}
+RED_SEA_PORTS = {"JED", "AQJ", "SKN"}
+AFRICA = {"TZ", "KE"}
+
+
+def clean(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def number(value: object) -> float:
+    text = clean(value).replace(",", "")
+    if not text:
+        return 0.0
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
+
+
+def whole(value: float) -> int | float:
+    return int(value) if float(value).is_integer() else round(value, 2)
+
+
+def efc_destination_rule(dest_country: str, dest_port: str) -> tuple[str, int, int] | None:
+    if dest_country == "JP":
+        return ("JAPAN", 60, 120)
+    if dest_country in {"CN", "HK", "TW"}:
+        return ("CHINA/HONG KONG/TAIWAN", 40, 80)
+    if dest_country in SOUTH_EAST_ASIA:
+        return ("SOUTH EAST ASIA", 40, 80)
+    if dest_country in ISC:
+        return ("INDIA/PAKISTAN (ISC)", 160, 320)
+    if dest_country in RED_SEA_COUNTRIES or dest_port in RED_SEA_PORTS:
+        return ("RED SEA", 200, 400)
+    if dest_country in MIDDLE_EAST:
+        return ("MIDDLE EAST", 160, 320)
+    if dest_country in AFRICA:
+        return ("AFRICA", 200, 400)
+    if dest_country == "MX":
+        return ("MEXICO", 200, 400)
+    return None
+
+
+def status_for(expected: float, actual: float) -> str:
+    if expected <= 0 and actual > 0:
+        return "수량확인"
+    if expected <= 0:
+        return "수량없음"
+    if actual <= 0:
+        return "미징수"
+    if actual < expected * 0.95:
+        return "부분징수"
+    if actual > expected * 1.05:
+        return "초과징수"
+    return "정상"
+
+
+def read_rows() -> tuple[list[dict], dict]:
+    records: list[dict] = []
+    skipped_summary = 0
+    raw_rows = 0
+
+    with SOURCE_CSV.open("r", encoding="cp949", newline="") as f:
+        reader = csv.DictReader(f)
+        for row_no, row in enumerate(reader, start=2):
+            raw_rows += 1
+            year = clean(row.get("실적년"))
+            month = clean(row.get("실적월"))
+            week_raw = clean(row.get("실적년주차"))
+
+            # DynamicList exports a final total row with blank year/month and very large sums.
+            if not year or not month:
+                skipped_summary += 1
+                continue
+
+            origin_country = clean(row.get("por국가"))
+            origin_area = clean(row.get("porarea"))
+            origin_port = clean(row.get("pol지역"))
+            dest_country = clean(row.get("dly국가"))
+            dest_area = clean(row.get("dlyarea"))
+            dest_port = clean(row.get("dly지역"))
+
+            qty20 = number(row.get("20갯수"))
+            qty40 = number(row.get("40갯수"))
+            teu = number(row.get("전체 teu"))
+            lss_actual = number(row.get("20 lss")) + number(row.get("40 lss"))
+            efc_actual = number(row.get("20 efc")) + number(row.get("40 efc"))
+
+            program = "대상외"
+            tariff_category = ""
+            charge_basis = ""
+            rate20 = 0
+            rate40 = 0
+            actual = 0.0
+            expected = 0.0
+
+            if origin_country == "CN" and dest_country == "JP":
+                program = "LSS CN→JP"
+                tariff_category = "CHINA TO JAPAN"
+                charge_basis = "LSS increase"
+                rate20 = 150
+                rate40 = 300
+                actual = lss_actual
+                expected = qty20 * rate20 + qty40 * rate40
+            elif origin_country not in EFC_EXCLUDED_ORIGINS:
+                rule = efc_destination_rule(dest_country, dest_port)
+                if rule:
+                    tariff_category, rate20, rate40 = rule
+                    program = "EFC non-CN"
+                    charge_basis = "EFC tariff"
+                    actual = efc_actual
+                    expected = qty20 * rate20 + qty40 * rate40
+
+            if program == "대상외":
+                continue
+
+            booking_shipper = clean(row.get("booking shipper"))
+            handling_consignee = clean(row.get("handling consignee"))
+            status = status_for(expected, actual)
+            gap = expected - actual
+
+            records.append(
+                {
+                    "row": row_no,
+                    "year": year,
+                    "month": month.zfill(2),
+                    "yearMonth": f"{year}-{month.zfill(2)}",
+                    "week": str(int(number(week_raw))) if week_raw else "",
+                    "originCountry": origin_country,
+                    "originArea": origin_area,
+                    "originPort": origin_port,
+                    "destinationCountry": dest_country,
+                    "destinationArea": dest_area,
+                    "destinationPort": dest_port,
+                    "bookingShipper": booking_shipper,
+                    "handlingConsignee": handling_consignee,
+                    "bl": clean(row.get("bl번호")),
+                    "pc": clean(row.get("p/c")),
+                    "qty20": whole(qty20),
+                    "qty40": whole(qty40),
+                    "teu": whole(teu),
+                    "route": clean(row.get("route")),
+                    "vessel": clean(row.get("vessel")),
+                    "voyage": clean(row.get("voyage no")),
+                    "cargoMode": clean(row.get("cgo mode")),
+                    "program": program,
+                    "tariffCategory": tariff_category,
+                    "chargeBasis": charge_basis,
+                    "rate20": rate20,
+                    "rate40": rate40,
+                    "expected": round(expected, 2),
+                    "actual": round(actual, 2),
+                    "gap": round(gap, 2),
+                    "status": status,
+                }
+            )
+
+    meta = {
+        "source": SOURCE_CSV.name,
+        "rawRows": raw_rows,
+        "targetRows": len(records),
+        "skippedSummaryRows": skipped_summary,
+        "programCounts": dict(Counter(r["program"] for r in records)),
+        "statusCounts": dict(Counter(r["status"] for r in records)),
+    }
+    return records, meta
+
+
+HTML = r"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EFC/LSS Collection Dashboard</title>
+  <style>
+    :root {
+      --bg: #f6f7f4;
+      --panel: #ffffff;
+      --ink: #1d2521;
+      --muted: #69756f;
+      --line: #d9dfda;
+      --line-strong: #b8c4bc;
+      --green: #1f7a5b;
+      --green-soft: #dceee7;
+      --blue: #276fbf;
+      --blue-soft: #deebf8;
+      --yellow: #f2b84b;
+      --yellow-soft: #fff2cf;
+      --red: #c84747;
+      --red-soft: #f7dddd;
+      --violet: #6a5acd;
+      --shadow: 0 12px 30px rgba(29, 37, 33, 0.08);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    header {
+      background: #17382c;
+      color: #f8fbf8;
+      padding: 22px 28px 18px;
+      border-bottom: 4px solid #d4a12d;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+    header .sub {
+      margin-top: 6px;
+      color: #cbd9d1;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    main {
+      padding: 18px 20px 28px;
+      max-width: 1640px;
+      margin: 0 auto;
+    }
+
+    .toolbar, .kpis, .grid, .wide-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .toolbar {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      align-items: end;
+      margin-bottom: 14px;
+    }
+
+    .control {
+      min-width: 0;
+    }
+
+    .control.small { grid-column: span 1; }
+    .control.medium { grid-column: span 2; }
+    .control.large { grid-column: span 3; }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      margin: 0 0 5px;
+    }
+
+    select, input {
+      width: 100%;
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--ink);
+      padding: 0 10px;
+      outline: none;
+      font: inherit;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(31, 122, 91, 0.14);
+    }
+
+    .segmented {
+      display: inline-grid;
+      width: 100%;
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      overflow: hidden;
+      min-height: 36px;
+    }
+
+    .segmented button {
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 760;
+      cursor: pointer;
+      padding: 0 8px;
+      min-width: 0;
+    }
+
+    .segmented button:last-child { border-right: 0; }
+    .segmented button.active {
+      background: var(--green);
+      color: #fff;
+    }
+
+    .kpis {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      margin-bottom: 14px;
+    }
+
+    .panel, .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .metric {
+      padding: 14px 14px 12px;
+      min-width: 0;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .metric .value {
+      margin-top: 8px;
+      font-size: 24px;
+      line-height: 1.05;
+      font-weight: 820;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .metric .delta {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .grid {
+      grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+      margin-bottom: 14px;
+    }
+
+    .wide-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .panel {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 820;
+      min-width: 0;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .breadcrumb button {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 5px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .chart {
+      padding: 12px 14px 16px;
+      min-height: 333px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: minmax(86px, 160px) minmax(0, 1fr) 94px;
+      gap: 10px;
+      align-items: center;
+      margin: 8px 0;
+    }
+
+    .bar-label {
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bar-track {
+      position: relative;
+      height: 22px;
+      background: #edf1ee;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      background: linear-gradient(90deg, var(--red), var(--yellow));
+      border-radius: 4px;
+    }
+
+    .bar-actual {
+      position: absolute;
+      inset: 4px auto 4px 0;
+      background: var(--green);
+      border-radius: 3px;
+      opacity: 0.9;
+    }
+
+    .bar-value {
+      color: var(--muted);
+      text-align: right;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 560px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 940px;
+    }
+
+    th, td {
+      padding: 10px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f8faf8;
+      color: #53615a;
+      font-size: 12px;
+      font-weight: 820;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.data-row { cursor: pointer; }
+    tr.data-row:hover { background: #f4faf7; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      border-radius: 999px;
+      padding: 0 8px;
+      font-size: 12px;
+      font-weight: 780;
+      border: 1px solid transparent;
+    }
+
+    .pill.ok { background: var(--green-soft); color: var(--green); }
+    .pill.missing { background: var(--red-soft); color: var(--red); }
+    .pill.partial { background: var(--yellow-soft); color: #916113; }
+    .pill.over { background: var(--blue-soft); color: var(--blue); }
+    .pill.check { background: #eee9ff; color: var(--violet); }
+    .pill.empty-qty { background: #ecefed; color: var(--muted); }
+
+    .rules {
+      padding: 12px 14px 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .rule-table {
+      min-width: 0;
+      font-size: 12px;
+    }
+
+    .rule-table th, .rule-table td {
+      padding: 7px 8px;
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      padding-top: 3px;
+    }
+
+    .empty {
+      padding: 32px 14px;
+      color: var(--muted);
+      text-align: center;
+      font-weight: 740;
+    }
+
+    @media (max-width: 1180px) {
+      .toolbar { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+      .control.small, .control.medium, .control.large { grid-column: span 2; }
+      .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      header { padding: 18px 16px 14px; }
+      main { padding: 14px 12px 22px; }
+      .toolbar { grid-template-columns: 1fr; }
+      .control.small, .control.medium, .control.large { grid-column: span 1; }
+      .kpis { grid-template-columns: 1fr; }
+      .metric .value { font-size: 22px; }
+      .bar-row { grid-template-columns: 92px minmax(0, 1fr) 74px; }
+      .panel-head { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>EFC/LSS Tariff Collection Monitor</h1>
+    <div class="sub">
+      <span id="sourceMeta"></span>
+      <span>CN→JP LSS USD 150/300</span>
+      <span>EFC DRY tariff basis</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="toolbar" aria-label="filters">
+      <div class="control large">
+        <label>Charge</label>
+        <div class="segmented" data-segment="program">
+          <button data-value="ALL" class="active">전체</button>
+          <button data-value="EFC non-CN">EFC</button>
+          <button data-value="LSS CN→JP">LSS</button>
+        </div>
+      </div>
+      <div class="control medium">
+        <label>Layer</label>
+        <div class="segmented" data-segment="level">
+          <button data-value="origin" class="active">선적지</button>
+          <button data-value="lane">Lane</button>
+          <button data-value="customer">고객</button>
+        </div>
+      </div>
+      <div class="control medium">
+        <label>Origin</label>
+        <div class="segmented" data-segment="originBasis">
+          <button data-value="originPort">POL</button>
+          <button data-value="originCountry" class="active">국가</button>
+        </div>
+      </div>
+      <div class="control medium">
+        <label>Customer</label>
+        <div class="segmented" data-segment="customerBasis">
+          <button data-value="bookingShipper" class="active">Shipper</button>
+          <button data-value="handlingConsignee">CNEE</button>
+        </div>
+      </div>
+      <div class="control small">
+        <label>Month</label>
+        <select id="monthFilter"></select>
+      </div>
+      <div class="control small">
+        <label>Week</label>
+        <select id="weekFilter"></select>
+      </div>
+      <div class="control small">
+        <label>P/C</label>
+        <select id="pcFilter"></select>
+      </div>
+      <div class="control medium">
+        <label>Status</label>
+        <select id="statusFilter"></select>
+      </div>
+      <div class="control medium">
+        <label>선적지</label>
+        <select id="originFilter"></select>
+      </div>
+      <div class="control medium">
+        <label>도착지</label>
+        <select id="destinationFilter"></select>
+      </div>
+      <div class="control large">
+        <label>Search</label>
+        <input id="searchFilter" type="search" placeholder="BL / 고객 / Port / Route">
+      </div>
+    </section>
+
+    <section class="kpis">
+      <div class="metric">
+        <div class="label">징수율</div>
+        <div class="value" id="kpiRate">-</div>
+        <div class="delta" id="kpiRateDelta">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Tariff 기대액</div>
+        <div class="value" id="kpiExpected">-</div>
+        <div class="delta" id="kpiExpectedDelta">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">실제 징수액</div>
+        <div class="value" id="kpiActual">-</div>
+        <div class="delta" id="kpiActualDelta">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">Gap</div>
+        <div class="value" id="kpiGap">-</div>
+        <div class="delta" id="kpiGapDelta">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">대상 BL</div>
+        <div class="value" id="kpiBl">-</div>
+        <div class="delta" id="kpiBlDelta">-</div>
+      </div>
+      <div class="metric">
+        <div class="label">TEU</div>
+        <div class="value" id="kpiTeu">-</div>
+        <div class="delta" id="kpiTeuDelta">-</div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title" id="mainTitle">선적지별 징수율</div>
+            <div class="breadcrumb" id="breadcrumb"></div>
+          </div>
+          <div class="segmented" data-segment="sortMetric" style="width: 290px;">
+            <button data-value="gap" class="active">Gap</button>
+            <button data-value="expected">Tariff</button>
+            <button data-value="rate">징수율</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="mainTable"></table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Top Gap</div>
+        </div>
+        <div class="chart" id="gapChart"></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">BL Exception</div>
+        </div>
+        <div class="table-wrap">
+          <table id="exceptionTable"></table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Tariff Basis</div>
+        </div>
+        <div class="rules">
+          <table class="rule-table">
+            <thead>
+              <tr><th>구분</th><th class="num">20 DRY</th><th class="num">40 DRY</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LSS CN→JP</td><td class="num">150</td><td class="num">300</td></tr>
+              <tr><td>EFC JAPAN</td><td class="num">60</td><td class="num">120</td></tr>
+              <tr><td>EFC CHINA/HK/TAIWAN</td><td class="num">40</td><td class="num">80</td></tr>
+              <tr><td>EFC SOUTH EAST ASIA</td><td class="num">40</td><td class="num">80</td></tr>
+              <tr><td>EFC INDIA/PAKISTAN (ISC)</td><td class="num">160</td><td class="num">320</td></tr>
+              <tr><td>EFC MIDDLE EAST</td><td class="num">160</td><td class="num">320</td></tr>
+              <tr><td>EFC RED SEA / AFRICA / MEXICO</td><td class="num">200</td><td class="num">400</td></tr>
+            </tbody>
+          </table>
+          <div class="note">
+            LSS effective date: 2026-03-23. EFC effective date: 2026-03-28, Vietnam origin: 2026-04-01.
+            The source file has year/month/week but no ETD POL date, so row-level effective-date cutoff is not applied.
+            RF/RH 50% uplift is not applied because the source file has no refrigerated cargo flag.
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script id="dashboard-data" type="application/json">__DATA__</script>
+  <script>
+    const payload = JSON.parse(document.getElementById("dashboard-data").textContent);
+    const rows = payload.rows;
+    const meta = payload.meta;
+
+    const state = {
+      program: "ALL",
+      level: "origin",
+      originBasis: "originCountry",
+      customerBasis: "bookingShipper",
+      sortMetric: "gap",
+      month: "ALL",
+      week: "ALL",
+      pc: "ALL",
+      status: "ALL",
+      origin: "ALL",
+      destination: "ALL",
+      search: "",
+      selectedOrigin: "",
+      selectedDestination: "",
+      tableSort: { key: "gap", direction: "desc" },
+    };
+
+    const labels = {
+      origin: "선적지",
+      lane: "선적지-도착지",
+      customer: "고객",
+      expected: "Tariff",
+      actual: "징수",
+      gap: "Gap",
+      rate: "징수율",
+    };
+
+    function usd(value) {
+      return "$" + Math.round(value || 0).toLocaleString("en-US");
+    }
+
+    function num(value) {
+      return Math.round(value || 0).toLocaleString("en-US");
+    }
+
+    function pct(value) {
+      if (!Number.isFinite(value)) return "-";
+      return (value * 100).toFixed(1) + "%";
+    }
+
+    function safe(value, fallback = "-") {
+      return value && String(value).trim() ? value : fallback;
+    }
+
+    function statusClass(status) {
+      return {
+        "정상": "ok",
+        "미징수": "missing",
+        "부분징수": "partial",
+        "초과징수": "over",
+        "수량확인": "check",
+        "수량없음": "empty-qty",
+      }[status] || "partial";
+    }
+
+    function originValue(row) {
+      return state.originBasis === "originCountry" ? row.originCountry : row.originPort;
+    }
+
+    function originLabel(row) {
+      if (state.originBasis === "originCountry") return safe(row.originCountry);
+      return `${safe(row.originPort)} (${safe(row.originCountry)})`;
+    }
+
+    function destinationLabel(row) {
+      return `${safe(row.destinationPort)} (${safe(row.destinationCountry)})`;
+    }
+
+    function customerValue(row) {
+      const value = row[state.customerBasis];
+      return safe(value, "미지정");
+    }
+
+    function matchesSearch(row, term) {
+      if (!term) return true;
+      const text = [
+        row.bl, row.bookingShipper, row.handlingConsignee, row.originCountry, row.originPort,
+        row.destinationCountry, row.destinationPort, row.route, row.vessel, row.voyage,
+        row.tariffCategory, row.status,
+      ].join(" ").toLowerCase();
+      return text.includes(term);
+    }
+
+    function filteredRows() {
+      const term = state.search.trim().toLowerCase();
+      return rows.filter(row => {
+        if (state.program !== "ALL" && row.program !== state.program) return false;
+        if (state.month !== "ALL" && row.yearMonth !== state.month) return false;
+        if (state.week !== "ALL" && row.week !== state.week) return false;
+        if (state.pc !== "ALL" && row.pc !== state.pc) return false;
+        if (state.status !== "ALL" && row.status !== state.status) return false;
+        if (state.origin !== "ALL" && originValue(row) !== state.origin) return false;
+        if (state.destination !== "ALL" && row.destinationPort !== state.destination) return false;
+        if (state.selectedOrigin && originValue(row) !== state.selectedOrigin) return false;
+        if (state.selectedDestination && row.destinationPort !== state.selectedDestination) return false;
+        return matchesSearch(row, term);
+      });
+    }
+
+    function aggregate(sourceRows, groupers) {
+      const map = new Map();
+      for (const row of sourceRows) {
+        const parts = groupers.map(g => g.value(row));
+        const key = parts.join("\u001f");
+        if (!map.has(key)) {
+          const labels = groupers.map(g => g.label(row));
+          map.set(key, {
+            key,
+            parts,
+            labels,
+            rows: 0,
+            blSet: new Set(),
+            qty20: 0,
+            qty40: 0,
+            teu: 0,
+            expected: 0,
+            actual: 0,
+            gap: 0,
+            missing: 0,
+            partial: 0,
+            over: 0,
+            check: 0,
+            programs: new Set(),
+            categories: new Set(),
+          });
+        }
+        const item = map.get(key);
+        item.rows += 1;
+        item.blSet.add(row.bl);
+        item.qty20 += Number(row.qty20 || 0);
+        item.qty40 += Number(row.qty40 || 0);
+        item.teu += Number(row.teu || 0);
+        item.expected += Number(row.expected || 0);
+        item.actual += Number(row.actual || 0);
+        item.gap += Number(row.gap || 0);
+        if (row.status === "미징수") item.missing += 1;
+        if (row.status === "부분징수") item.partial += 1;
+        if (row.status === "초과징수") item.over += 1;
+        if (row.status === "수량확인") item.check += 1;
+        item.programs.add(row.program);
+        item.categories.add(row.tariffCategory);
+      }
+      return Array.from(map.values()).map(item => ({
+        ...item,
+        bl: item.blSet.size,
+        rate: item.expected > 0 ? item.actual / item.expected : NaN,
+        programText: Array.from(item.programs).join(", "),
+        categoryText: Array.from(item.categories).slice(0, 3).join(", "),
+        sortLabel: item.labels.join(" > "),
+      }));
+    }
+
+    function currentGroupers() {
+      const origin = {
+        value: row => originValue(row),
+        label: row => originLabel(row),
+      };
+      const destination = {
+        value: row => row.destinationPort,
+        label: row => destinationLabel(row),
+      };
+      const customer = {
+        value: row => customerValue(row),
+        label: row => customerValue(row),
+      };
+      if (state.level === "origin") return [origin];
+      if (state.level === "lane") return [origin, destination];
+      return [origin, destination, customer];
+    }
+
+    function totals(sourceRows) {
+      const bl = new Set();
+      const total = sourceRows.reduce((acc, row) => {
+        bl.add(row.bl);
+        acc.expected += Number(row.expected || 0);
+        acc.actual += Number(row.actual || 0);
+        acc.gap += Number(row.gap || 0);
+        acc.teu += Number(row.teu || 0);
+        acc.qty20 += Number(row.qty20 || 0);
+        acc.qty40 += Number(row.qty40 || 0);
+        if (row.status === "미징수") acc.missing += 1;
+        if (row.status === "부분징수") acc.partial += 1;
+        if (row.status === "초과징수") acc.over += 1;
+        if (row.status === "수량확인") acc.check += 1;
+        return acc;
+      }, { expected: 0, actual: 0, gap: 0, teu: 0, qty20: 0, qty40: 0, missing: 0, partial: 0, over: 0, check: 0 });
+      total.bl = bl.size;
+      total.rate = total.expected > 0 ? total.actual / total.expected : NaN;
+      return total;
+    }
+
+    function fillSelect(id, values, current, formatter = x => x) {
+      const select = document.getElementById(id);
+      const previous = current || select.value || "ALL";
+      const unique = Array.from(new Set(values.filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b)));
+      select.innerHTML = `<option value="ALL">전체</option>` + unique.map(value => {
+        const selected = value === previous ? " selected" : "";
+        return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(formatter(value))}</option>`;
+      }).join("");
+      if (previous !== "ALL" && !unique.includes(previous)) {
+        select.value = "ALL";
+        return "ALL";
+      }
+      select.value = previous;
+      return previous;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[ch]));
+    }
+
+    function setupFilters() {
+      fillSelect("monthFilter", rows.map(r => r.yearMonth), state.month);
+      fillSelect("weekFilter", rows.map(r => r.week), state.week, v => `W${v}`);
+      fillSelect("pcFilter", rows.map(r => r.pc), state.pc);
+      fillSelect("statusFilter", ["정상", "부분징수", "미징수", "초과징수", "수량확인", "수량없음"], state.status);
+      updateOriginDestinationFilters();
+    }
+
+    function updateOriginDestinationFilters() {
+      const base = rows.filter(row => state.program === "ALL" || row.program === state.program);
+      state.origin = fillSelect("originFilter", base.map(originValue), state.origin);
+      state.destination = fillSelect("destinationFilter", base.map(r => r.destinationPort), state.destination, value => {
+        const found = base.find(r => r.destinationPort === value);
+        return found ? `${value} (${found.destinationCountry})` : value;
+      });
+    }
+
+    function renderKpis(sourceRows) {
+      const total = totals(sourceRows);
+      document.getElementById("kpiRate").textContent = pct(total.rate);
+      document.getElementById("kpiRateDelta").textContent = `${num(total.missing + total.partial)} under-collected rows`;
+      document.getElementById("kpiExpected").textContent = usd(total.expected);
+      document.getElementById("kpiExpectedDelta").textContent = `20' ${num(total.qty20)} / 40' ${num(total.qty40)}`;
+      document.getElementById("kpiActual").textContent = usd(total.actual);
+      document.getElementById("kpiActualDelta").textContent = `${num(total.over)} over / ${num(total.check)} qty-check`;
+      document.getElementById("kpiGap").textContent = usd(total.gap);
+      document.getElementById("kpiGapDelta").textContent = total.gap >= 0 ? "shortfall" : "over-collected";
+      document.getElementById("kpiBl").textContent = num(total.bl);
+      document.getElementById("kpiBlDelta").textContent = `${num(sourceRows.length)} rows`;
+      document.getElementById("kpiTeu").textContent = num(total.teu);
+      document.getElementById("kpiTeuDelta").textContent = `${state.program === "ALL" ? "EFC + LSS" : state.program}`;
+    }
+
+    function renderBreadcrumb() {
+      const bc = document.getElementById("breadcrumb");
+      const parts = [`<button data-action="reset">전체</button>`];
+      if (state.selectedOrigin) {
+        parts.push(`<span>/</span><button data-action="origin">${escapeHtml(state.selectedOrigin)}</button>`);
+      }
+      if (state.selectedDestination) {
+        parts.push(`<span>/</span><button data-action="destination">${escapeHtml(state.selectedDestination)}</button>`);
+      }
+      bc.innerHTML = parts.join("");
+      bc.querySelectorAll("button").forEach(button => {
+        button.addEventListener("click", () => {
+          const action = button.dataset.action;
+          if (action === "reset") {
+            state.selectedOrigin = "";
+            state.selectedDestination = "";
+            state.level = "origin";
+          } else if (action === "origin") {
+            state.selectedDestination = "";
+            state.level = "lane";
+          } else {
+            state.level = "customer";
+          }
+          syncSegments();
+          render();
+        });
+      });
+    }
+
+    function sortAggregates(items) {
+      const key = state.tableSort.key;
+      const direction = state.tableSort.direction === "asc" ? 1 : -1;
+      return items.sort((a, b) => {
+        let av = a[key];
+        let bv = b[key];
+        if (Array.isArray(av)) av = av.join(" > ");
+        if (Array.isArray(bv)) bv = bv.join(" > ");
+        if (typeof av === "string" || typeof bv === "string") return String(av).localeCompare(String(bv)) * direction;
+        if (!Number.isFinite(av)) av = -Infinity;
+        if (!Number.isFinite(bv)) bv = -Infinity;
+        return (av - bv) * direction;
+      });
+    }
+
+    function headerCell(label, key, numeric = false) {
+      const cls = numeric ? " class=\"num\"" : "";
+      return `<th${cls} data-sort="${key}">${label}</th>`;
+    }
+
+    function renderMainTable(sourceRows) {
+      const groupers = currentGroupers();
+      const items = sortAggregates(aggregate(sourceRows, groupers));
+      const table = document.getElementById("mainTable");
+      const title = document.getElementById("mainTitle");
+      title.textContent = `${labels[state.level]}별 징수율`;
+
+      if (!items.length) {
+        table.innerHTML = `<tbody><tr><td class="empty">No data</td></tr></tbody>`;
+        return;
+      }
+
+      const nameHeaders = state.level === "origin"
+        ? [headerCell("선적지", "name")]
+        : state.level === "lane"
+          ? [headerCell("선적지", "origin"), headerCell("도착지", "destination")]
+          : [headerCell("선적지", "origin"), headerCell("도착지", "destination"), headerCell("고객", "customer")];
+
+      table.innerHTML = `
+        <thead>
+          <tr>
+            ${nameHeaders.join("")}
+            ${headerCell("BL", "bl", true)}
+            ${headerCell("TEU", "teu", true)}
+            ${headerCell("Tariff", "expected", true)}
+            ${headerCell("징수", "actual", true)}
+            ${headerCell("Gap", "gap", true)}
+            ${headerCell("징수율", "rate", true)}
+            ${headerCell("미/부분", "missing", true)}
+            <th>구분</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(item => {
+            const cells = state.level === "origin"
+              ? `<td>${escapeHtml(item.labels[0])}</td>`
+              : state.level === "lane"
+                ? `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td>`
+                : `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td><td>${escapeHtml(item.labels[2])}</td>`;
+            const issueCount = item.missing + item.partial;
+            return `
+              <tr class="data-row" data-parts="${escapeHtml(JSON.stringify(item.parts))}">
+                ${cells}
+                <td class="num">${num(item.bl)}</td>
+                <td class="num">${num(item.teu)}</td>
+                <td class="num">${usd(item.expected)}</td>
+                <td class="num">${usd(item.actual)}</td>
+                <td class="num">${usd(item.gap)}</td>
+                <td class="num">${pct(item.rate)}</td>
+                <td class="num">${num(issueCount)}</td>
+                <td>${escapeHtml(item.programText)}</td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      `;
+
+      table.querySelectorAll("th[data-sort]").forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.sort;
+          const map = { name: "sortLabel", origin: "sortLabel", destination: "sortLabel", customer: "sortLabel" };
+          state.tableSort.key = map[key] || key;
+          state.tableSort.direction = state.tableSort.direction === "desc" ? "asc" : "desc";
+          render();
+        });
+      });
+
+      table.querySelectorAll("tr.data-row").forEach(tr => {
+        tr.addEventListener("click", () => {
+          const parts = JSON.parse(tr.dataset.parts);
+          if (state.level === "origin") {
+            state.selectedOrigin = parts[0];
+            state.selectedDestination = "";
+            state.level = "lane";
+          } else if (state.level === "lane") {
+            state.selectedOrigin = parts[0];
+            state.selectedDestination = parts[1];
+            state.level = "customer";
+          }
+          syncSegments();
+          render();
+        });
+      });
+    }
+
+    function renderChart(sourceRows) {
+      const groupers = currentGroupers();
+      const items = aggregate(sourceRows, groupers)
+        .sort((a, b) => {
+          const av = Number.isFinite(a[state.sortMetric]) ? a[state.sortMetric] : -Infinity;
+          const bv = Number.isFinite(b[state.sortMetric]) ? b[state.sortMetric] : -Infinity;
+          return bv - av;
+        })
+        .slice(0, 12);
+      const chart = document.getElementById("gapChart");
+      if (!items.length) {
+        chart.innerHTML = `<div class="empty">No data</div>`;
+        return;
+      }
+      const max = Math.max(...items.map(item => Math.abs(item[state.sortMetric]) || 0), 1);
+      chart.innerHTML = items.map(item => {
+        const value = Number.isFinite(item[state.sortMetric]) ? item[state.sortMetric] : 0;
+        const gapWidth = Math.min(100, Math.abs(value) / max * 100);
+        const actualWidth = item.expected > 0 ? Math.min(100, item.actual / item.expected * 100) : 0;
+        const label = item.labels[item.labels.length - 1];
+        const metricValue = state.sortMetric === "rate" ? pct(value) : usd(value);
+        return `
+          <div class="bar-row" title="${escapeHtml(item.labels.join(" > "))}">
+            <div class="bar-label">${escapeHtml(label)}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${gapWidth}%"></div>
+              <div class="bar-actual" style="width:${actualWidth}%"></div>
+            </div>
+            <div class="bar-value">${metricValue}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderExceptions(sourceRows) {
+      const table = document.getElementById("exceptionTable");
+      const items = sourceRows
+        .filter(row => !["정상", "수량없음"].includes(row.status))
+        .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
+        .slice(0, 120);
+      if (!items.length) {
+        table.innerHTML = `<tbody><tr><td class="empty">No exception</td></tr></tbody>`;
+        return;
+      }
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Status</th><th>BL</th><th>Charge</th><th>POL</th><th>POD</th><th>고객</th>
+            <th class="num">20</th><th class="num">40</th><th class="num">Tariff</th><th class="num">징수</th><th class="num">Gap</th><th>Tariff Cat.</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(row => `
+            <tr>
+              <td><span class="pill ${statusClass(row.status)}">${escapeHtml(row.status)}</span></td>
+              <td>${escapeHtml(row.bl)}</td>
+              <td>${escapeHtml(row.program)}</td>
+              <td>${escapeHtml(row.originPort)} (${escapeHtml(row.originCountry)})</td>
+              <td>${escapeHtml(row.destinationPort)} (${escapeHtml(row.destinationCountry)})</td>
+              <td>${escapeHtml(customerValue(row))}</td>
+              <td class="num">${num(row.qty20)}</td>
+              <td class="num">${num(row.qty40)}</td>
+              <td class="num">${usd(row.expected)}</td>
+              <td class="num">${usd(row.actual)}</td>
+              <td class="num">${usd(row.gap)}</td>
+              <td>${escapeHtml(row.tariffCategory)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      `;
+    }
+
+    function syncSegments() {
+      document.querySelectorAll("[data-segment]").forEach(group => {
+        const key = group.dataset.segment;
+        group.querySelectorAll("button").forEach(button => {
+          button.classList.toggle("active", button.dataset.value === state[key]);
+        });
+      });
+    }
+
+    function render() {
+      updateOriginDestinationFilters();
+      const sourceRows = filteredRows();
+      renderKpis(sourceRows);
+      renderBreadcrumb();
+      renderMainTable(sourceRows);
+      renderChart(sourceRows);
+      renderExceptions(sourceRows);
+      document.getElementById("sourceMeta").textContent = `${meta.source} · ${num(meta.targetRows)} target rows · ${num(meta.skippedSummaryRows)} summary row skipped`;
+    }
+
+    document.querySelectorAll("[data-segment] button").forEach(button => {
+      button.addEventListener("click", () => {
+        const group = button.closest("[data-segment]");
+        const key = group.dataset.segment;
+        state[key] = button.dataset.value;
+        if (key === "originBasis") {
+          state.origin = "ALL";
+          state.selectedOrigin = "";
+          state.selectedDestination = "";
+        }
+        if (key === "program") {
+          state.origin = "ALL";
+          state.destination = "ALL";
+          state.selectedOrigin = "";
+          state.selectedDestination = "";
+        }
+        if (key === "level" && state.level === "origin") {
+          state.selectedOrigin = "";
+          state.selectedDestination = "";
+        }
+        state.tableSort.key = state.sortMetric;
+        syncSegments();
+        render();
+      });
+    });
+
+    document.getElementById("monthFilter").addEventListener("change", event => { state.month = event.target.value; render(); });
+    document.getElementById("weekFilter").addEventListener("change", event => { state.week = event.target.value; render(); });
+    document.getElementById("pcFilter").addEventListener("change", event => { state.pc = event.target.value; render(); });
+    document.getElementById("statusFilter").addEventListener("change", event => { state.status = event.target.value; render(); });
+    document.getElementById("originFilter").addEventListener("change", event => {
+      state.origin = event.target.value;
+      state.selectedOrigin = "";
+      state.selectedDestination = "";
+      render();
+    });
+    document.getElementById("destinationFilter").addEventListener("change", event => {
+      state.destination = event.target.value;
+      state.selectedDestination = "";
+      render();
+    });
+    document.getElementById("searchFilter").addEventListener("input", event => {
+      state.search = event.target.value;
+      render();
+    });
+
+    setupFilters();
+    syncSegments();
+    render();
+  </script>
+</body>
+</html>
+"""
+
+
+def main() -> None:
+    if not SOURCE_CSV.exists():
+        raise SystemExit(f"Missing source file: {SOURCE_CSV}")
+
+    rows, meta = read_rows()
+    data = json.dumps({"rows": rows, "meta": meta}, ensure_ascii=False, separators=(",", ":"))
+    data = data.replace("</", "<\\/")
+    html = HTML.replace("__DATA__", data)
+    for output_file in OUTPUT_FILES:
+        output_file.write_text(html, encoding="utf-8")
+    print(f"Wrote {', '.join(str(path) for path in OUTPUT_FILES)} with {len(rows):,} target rows")
+    print(json.dumps(meta, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
