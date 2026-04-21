@@ -325,6 +325,22 @@ HTML = r"""<!doctype html>
       text-decoration: underline;
     }
 
+    .lang-btn {
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .login-help .lang-btn {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--green);
+      min-height: 28px;
+      padding: 0 12px;
+    }
+
     .app-shell {
       display: none;
     }
@@ -751,7 +767,7 @@ HTML = r"""<!doctype html>
   <div class="login-wrap" id="login">
     <div class="login-box">
       <h2>EFC/LSS Collection Dashboard</h2>
-      <p>회사 Google 계정으로 로그인하면 데이터를 볼 수 있습니다.</p>
+      <p id="loginIntro">회사 Google 계정으로 로그인하면 데이터를 볼 수 있습니다.</p>
       <button class="login-button" onclick="doLogin()">
         <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
           <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -759,9 +775,10 @@ HTML = r"""<!doctype html>
           <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
           <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
         </svg>
-        Google 계정으로 로그인
+        <span id="loginButtonText">Google 계정으로 로그인</span>
       </button>
-      <div class="login-help"><a href="guide.html">사용가이드 보기</a></div>
+      <div class="login-help"><a href="guide.html" id="loginGuideLink">사용가이드 보기</a></div>
+      <div class="login-help"><button class="lang-btn" onclick="toggleLang()" type="button">EN</button></div>
       <p class="login-error" id="loginErr"></p>
     </div>
   </div>
@@ -769,16 +786,17 @@ HTML = r"""<!doctype html>
   <div id="app" class="app-shell">
     <header>
       <div class="header-top">
-        <h1>EFC/LSS Tariff Collection Monitor</h1>
+        <h1 id="dashboardTitle">EFC/LSS Tariff Collection Monitor</h1>
         <div class="header-actions">
-          <a class="header-link" href="guide.html">Guide</a>
+          <button class="header-link lang-btn" onclick="toggleLang()" type="button">EN</button>
+          <a class="header-link" href="guide.html" id="guideLink">Guide</a>
           <button class="header-user" id="userInfo" onclick="logout()"></button>
         </div>
       </div>
       <div class="sub">
         <span id="sourceMeta"></span>
-        <span>CN→JP LSS USD 150/300</span>
-        <span>EFC DRY tariff basis</span>
+        <span id="lssBasisText">CN→JP LSS USD 150/300</span>
+        <span id="efcBasisText">EFC DRY tariff basis</span>
       </div>
     </header>
 
@@ -917,12 +935,12 @@ HTML = r"""<!doctype html>
 
       <div class="panel">
         <div class="panel-head">
-          <div class="panel-title">Tariff Basis</div>
+          <div class="panel-title" id="tariffBasisTitle">Tariff Basis</div>
         </div>
         <div class="rules">
           <table class="rule-table">
             <thead>
-              <tr><th>구분</th><th class="num">20 DRY</th><th class="num">40 DRY</th></tr>
+              <tr><th id="tariffCategoryHead">구분</th><th class="num">20 DRY</th><th class="num">40 DRY</th></tr>
             </thead>
             <tbody>
               <tr><td>LSS CN→JP</td><td class="num">150</td><td class="num">300</td></tr>
@@ -934,7 +952,7 @@ HTML = r"""<!doctype html>
               <tr><td>EFC RED SEA / AFRICA / MEXICO</td><td class="num">200</td><td class="num">400</td></tr>
             </tbody>
           </table>
-          <div class="note">
+          <div class="note" id="tariffNote">
             LSS effective date: 2026-03-23. EFC effective date: 2026-03-28, Vietnam origin: 2026-04-01.
             The source file has year/month/week but no ETD POL date, so row-level effective-date cutoff is not applied.
             RF/RH 50% uplift is not applied because the source file has no refrigerated cargo flag.
@@ -956,6 +974,122 @@ HTML = r"""<!doctype html>
     let gToken = null;
     let gUser = null;
     let appInitialized = false;
+    let lang = localStorage.getItem("efcLssLang") || localStorage.getItem("lang") || "ko";
+
+    const I18N = {
+      ko: {
+        langButton: "EN",
+        dashboardTitle: "EFC/LSS Tariff Collection Monitor",
+        loginIntro: "회사 Google 계정으로 로그인하면 데이터를 볼 수 있습니다.",
+        loginButton: "Google 계정으로 로그인",
+        loginGuide: "사용가이드 보기",
+        guide: "Guide",
+        logout: "로그아웃",
+        loading: "데이터 로딩 중...",
+        loadFailed: "데이터 로드 실패",
+        fileLoginError: "Google 로그인은 GitHub Pages URL에서 실행해야 합니다.",
+        userInfoFailed: "사용자 정보 확인 실패",
+        domainDenied: domain => `${domain || "Unknown"} 도메인은 접근할 수 없습니다.`,
+        lssBasis: "CN→JP LSS USD 150/300",
+        efcBasis: "EFC DRY tariff basis",
+        sourceMeta: meta => `${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows`,
+        filters: {
+          charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
+          week: "Week", pc: "P/C", status: "Status", originSelect: "선적지", destination: "도착지", search: "Search",
+        },
+        buttons: {
+          all: "전체", origin: "선적지", lane: "Lane", customer: "고객", country: "국가",
+          shipper: "Shipper", cnee: "CNEE", gap: "Gap", tariff: "Tariff", rate: "징수율",
+        },
+        searchPlaceholder: "BL / 고객 / Port / Route",
+        kpis: {
+          rate: "징수율", expected: "Tariff 기대액", actual: "실제 징수액", gap: "Gap", bl: "대상 BL", teu: "TEU",
+          underCollected: count => `${num(count)} under-collected rows`,
+          qty: (qty20, qty40) => `20' ${num(qty20)} / 40' ${num(qty40)}`,
+          overCheck: (over, check) => `${num(over)} over / ${num(check)} qty-check`,
+          shortfall: "shortfall",
+          overCollected: "over-collected",
+          rows: count => `${num(count)} rows`,
+        },
+        labels: {
+          origin: "선적지", lane: "선적지-도착지", customer: "고객",
+          expected: "Tariff", actual: "징수", gap: "Gap", rate: "징수율",
+        },
+        table: {
+          titleSuffix: "별 징수율", noData: "데이터 없음", noException: "예외 없음",
+          bl: "BL", teu: "TEU", issue: "미/부분", category: "구분", status: "Status",
+          charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+        },
+        tariffBasis: "Tariff Basis",
+        tariffCategory: "구분",
+        tariffNote: "LSS effective date: 2026-03-23. EFC effective date: 2026-03-28, Vietnam origin: 2026-04-01. The source file has year/month/week but no ETD POL date, so row-level effective-date cutoff is not applied. RF/RH 50% uplift is not applied because the source file has no refrigerated cargo flag.",
+        statusMap: {
+          "정상": "정상",
+          "미징수": "미징수",
+          "부분징수": "부분징수",
+          "초과징수": "초과징수",
+          "수량확인": "수량확인",
+          "수량없음": "수량없음",
+        },
+        unassigned: "미지정",
+      },
+      en: {
+        langButton: "KO",
+        dashboardTitle: "EFC/LSS Tariff Collection Monitor",
+        loginIntro: "Sign in with your company Google account to view the dashboard.",
+        loginButton: "Sign in with Google",
+        loginGuide: "View User Guide",
+        guide: "Guide",
+        logout: "Logout",
+        loading: "Loading data...",
+        loadFailed: "Data load failed",
+        fileLoginError: "Google login must be used from the GitHub Pages URL.",
+        userInfoFailed: "Failed to verify user",
+        domainDenied: domain => `${domain || "Unknown"} domain is not allowed.`,
+        lssBasis: "CN→JP LSS USD 150/300",
+        efcBasis: "EFC DRY tariff basis",
+        sourceMeta: meta => `${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped`,
+        filters: {
+          charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
+          week: "Week", pc: "P/C", status: "Status", originSelect: "Origin", destination: "Destination", search: "Search",
+        },
+        buttons: {
+          all: "All", origin: "Origin", lane: "Lane", customer: "Customer", country: "Country",
+          shipper: "Shipper", cnee: "CNEE", gap: "Gap", tariff: "Tariff", rate: "Rate",
+        },
+        searchPlaceholder: "BL / customer / port / route",
+        kpis: {
+          rate: "Collection Rate", expected: "Tariff Expected", actual: "Actual Collection", gap: "Gap", bl: "Target BL", teu: "TEU",
+          underCollected: count => `${num(count)} under-collected rows`,
+          qty: (qty20, qty40) => `20' ${num(qty20)} / 40' ${num(qty40)}`,
+          overCheck: (over, check) => `${num(over)} over / ${num(check)} qty-check`,
+          shortfall: "shortfall",
+          overCollected: "over-collected",
+          rows: count => `${num(count)} rows`,
+        },
+        labels: {
+          origin: "Origin", lane: "Lane", customer: "Customer",
+          expected: "Tariff", actual: "Actual", gap: "Gap", rate: "Rate",
+        },
+        table: {
+          titleSuffix: " Collection Rate", noData: "No data", noException: "No exception",
+          bl: "BL", teu: "TEU", issue: "Missing/Partial", category: "Category", status: "Status",
+          charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+        },
+        tariffBasis: "Tariff Basis",
+        tariffCategory: "Category",
+        tariffNote: "LSS effective date: 2026-03-23. EFC effective date: 2026-03-28, Vietnam origin: 2026-04-01. The source file has year/month/week but no ETD POL date, so row-level effective-date cutoff is not applied. RF/RH 50% uplift is not applied because the source file has no refrigerated cargo flag.",
+        statusMap: {
+          "정상": "Normal",
+          "미징수": "Missing",
+          "부분징수": "Partial",
+          "초과징수": "Over",
+          "수량확인": "Qty Check",
+          "수량없음": "No Qty",
+        },
+        unassigned: "Unassigned",
+      },
+    };
 
     const state = {
       program: "ALL",
@@ -975,15 +1109,9 @@ HTML = r"""<!doctype html>
       tableSort: { key: "gap", direction: "desc" },
     };
 
-    const labels = {
-      origin: "선적지",
-      lane: "선적지-도착지",
-      customer: "고객",
-      expected: "Tariff",
-      actual: "징수",
-      gap: "Gap",
-      rate: "징수율",
-    };
+    function t() {
+      return I18N[lang] || I18N.ko;
+    }
 
     function usd(value) {
       return "$" + Math.round(value || 0).toLocaleString("en-US");
@@ -996,6 +1124,10 @@ HTML = r"""<!doctype html>
     function pct(value) {
       if (!Number.isFinite(value)) return "-";
       return (value * 100).toFixed(1) + "%";
+    }
+
+    function statusText(status) {
+      return t().statusMap[status] || status || "-";
     }
 
     function safe(value, fallback = "-") {
@@ -1028,7 +1160,7 @@ HTML = r"""<!doctype html>
 
     function customerValue(row) {
       const value = row[state.customerBasis];
-      return safe(value, "미지정");
+      return safe(value, t().unassigned);
     }
 
     function matchesSearch(row, term) {
@@ -1153,7 +1285,7 @@ HTML = r"""<!doctype html>
       const select = document.getElementById(id);
       const previous = current || select.value || "ALL";
       const unique = Array.from(new Set(values.filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b)));
-      select.innerHTML = `<option value="ALL">전체</option>` + unique.map(value => {
+      select.innerHTML = `<option value="ALL">${escapeHtml(t().buttons.all)}</option>` + unique.map(value => {
         const selected = value === previous ? " selected" : "";
         return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(formatter(value))}</option>`;
       }).join("");
@@ -1171,6 +1303,81 @@ HTML = r"""<!doctype html>
       }[ch]));
     }
 
+    function setText(id, value) {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    }
+
+    function toggleLang() {
+      lang = lang === "ko" ? "en" : "ko";
+      localStorage.setItem("efcLssLang", lang);
+      localStorage.setItem("lang", lang);
+      applyLang();
+      if (appInitialized) {
+        setupFilters();
+        syncSegments();
+        render();
+      }
+    }
+
+    function applyLang() {
+      const ui = t();
+      document.documentElement.lang = lang;
+      document.querySelectorAll(".lang-btn").forEach(button => {
+        button.textContent = ui.langButton;
+      });
+      setText("loginIntro", ui.loginIntro);
+      setText("loginButtonText", ui.loginButton);
+      setText("loginGuideLink", ui.loginGuide);
+      setText("guideLink", ui.guide);
+      setText("dashboardTitle", ui.dashboardTitle);
+      setText("lssBasisText", ui.lssBasis);
+      setText("efcBasisText", ui.efcBasis);
+      setText("tariffBasisTitle", ui.tariffBasis);
+      setText("tariffCategoryHead", ui.tariffCategory);
+      setText("tariffNote", ui.tariffNote);
+
+      const filterLabels = document.querySelectorAll(".toolbar .control > label");
+      [
+        ui.filters.charge, ui.filters.layer, ui.filters.origin, ui.filters.customer,
+        ui.filters.month, ui.filters.week, ui.filters.pc, ui.filters.status,
+        ui.filters.originSelect, ui.filters.destination, ui.filters.search,
+      ].forEach((label, index) => {
+        if (filterLabels[index]) filterLabels[index].textContent = label;
+      });
+
+      const buttonLabels = {
+        program: { ALL: ui.buttons.all, "EFC non-CN": "EFC", "LSS CN→JP": "LSS" },
+        level: { origin: ui.buttons.origin, lane: ui.buttons.lane, customer: ui.buttons.customer },
+        originBasis: { originPort: "POL", originCountry: ui.buttons.country },
+        customerBasis: { bookingShipper: ui.buttons.shipper, handlingConsignee: ui.buttons.cnee },
+        sortMetric: { gap: ui.buttons.gap, expected: ui.buttons.tariff, rate: ui.buttons.rate },
+      };
+      document.querySelectorAll("[data-segment]").forEach(group => {
+        const segment = group.dataset.segment;
+        group.querySelectorAll("button").forEach(button => {
+          const label = buttonLabels[segment]?.[button.dataset.value];
+          if (label) button.textContent = label;
+        });
+      });
+
+      const search = document.getElementById("searchFilter");
+      if (search) search.placeholder = ui.searchPlaceholder;
+      const kpiLabels = document.querySelectorAll(".kpis .metric .label");
+      [ui.kpis.rate, ui.kpis.expected, ui.kpis.actual, ui.kpis.gap, ui.kpis.bl, ui.kpis.teu]
+        .forEach((label, index) => {
+          if (kpiLabels[index]) kpiLabels[index].textContent = label;
+        });
+      const loading = document.getElementById("loading");
+      if (loading && loading.style.display !== "none" && !loading.classList.contains("error")) {
+        loading.textContent = ui.loading;
+      }
+      if (gUser) {
+        const userName = gUser?.name || gUser?.email || "User";
+        document.getElementById("userInfo").textContent = `${userName} | ${ui.logout}`;
+      }
+    }
+
     function setLoginError(message) {
       const element = document.getElementById("loginErr");
       element.textContent = message;
@@ -1183,7 +1390,7 @@ HTML = r"""<!doctype html>
 
     function doLogin() {
       if (location.protocol === "file:") {
-        setLoginError("Google 로그인은 GitHub Pages URL에서 실행해야 합니다.");
+        setLoginError(t().fileLoginError);
         return;
       }
 
@@ -1216,7 +1423,7 @@ HTML = r"""<!doctype html>
         .then(info => {
           const domain = (info.email || "").split("@")[1] || "";
           if (ALLOWED_DOMAINS.length && !ALLOWED_DOMAINS.includes(domain.toLowerCase())) {
-            setLoginError(`${domain || "Unknown"} 도메인은 접근할 수 없습니다.`);
+            setLoginError(t().domainDenied(domain));
             return;
           }
 
@@ -1227,7 +1434,7 @@ HTML = r"""<!doctype html>
           showApp();
         })
         .catch(error => {
-          setLoginError("사용자 정보 확인 실패: " + error.message);
+          setLoginError(`${t().userInfoFailed}: ${error.message}`);
         });
       return true;
     }
@@ -1268,7 +1475,7 @@ HTML = r"""<!doctype html>
       const loading = document.getElementById("loading");
       loading.classList.remove("error");
       loading.style.display = "block";
-      loading.textContent = "데이터 로딩 중...";
+      loading.textContent = t().loading;
 
       try {
         const response = await fetch(`${DATA_URL}?t=${Date.now()}`);
@@ -1279,7 +1486,7 @@ HTML = r"""<!doctype html>
         loading.style.display = "none";
       } catch (error) {
         loading.classList.add("error");
-        loading.textContent = "데이터 로드 실패: " + error.message;
+        loading.textContent = `${t().loadFailed}: ${error.message}`;
         throw error;
       }
     }
@@ -1289,7 +1496,7 @@ HTML = r"""<!doctype html>
       document.getElementById("login").style.display = "none";
       document.getElementById("app").style.display = "block";
       const userName = gUser?.name || gUser?.email || "User";
-      document.getElementById("userInfo").textContent = `${userName} | 로그아웃`;
+      document.getElementById("userInfo").textContent = `${userName} | ${t().logout}`;
 
       if (!appInitialized) {
         loadData()
@@ -1307,7 +1514,7 @@ HTML = r"""<!doctype html>
       fillSelect("monthFilter", rows.map(r => r.yearMonth), state.month);
       fillSelect("weekFilter", rows.map(r => r.week), state.week, v => `W${v}`);
       fillSelect("pcFilter", rows.map(r => r.pc), state.pc);
-      fillSelect("statusFilter", ["정상", "부분징수", "미징수", "초과징수", "수량확인", "수량없음"], state.status);
+      fillSelect("statusFilter", ["정상", "부분징수", "미징수", "초과징수", "수량확인", "수량없음"], state.status, statusText);
       updateOriginDestinationFilters();
     }
 
@@ -1323,22 +1530,22 @@ HTML = r"""<!doctype html>
     function renderKpis(sourceRows) {
       const total = totals(sourceRows);
       document.getElementById("kpiRate").textContent = pct(total.rate);
-      document.getElementById("kpiRateDelta").textContent = `${num(total.missing + total.partial)} under-collected rows`;
+      document.getElementById("kpiRateDelta").textContent = t().kpis.underCollected(total.missing + total.partial);
       document.getElementById("kpiExpected").textContent = usd(total.expected);
-      document.getElementById("kpiExpectedDelta").textContent = `20' ${num(total.qty20)} / 40' ${num(total.qty40)}`;
+      document.getElementById("kpiExpectedDelta").textContent = t().kpis.qty(total.qty20, total.qty40);
       document.getElementById("kpiActual").textContent = usd(total.actual);
-      document.getElementById("kpiActualDelta").textContent = `${num(total.over)} over / ${num(total.check)} qty-check`;
+      document.getElementById("kpiActualDelta").textContent = t().kpis.overCheck(total.over, total.check);
       document.getElementById("kpiGap").textContent = usd(total.gap);
-      document.getElementById("kpiGapDelta").textContent = total.gap >= 0 ? "shortfall" : "over-collected";
+      document.getElementById("kpiGapDelta").textContent = total.gap >= 0 ? t().kpis.shortfall : t().kpis.overCollected;
       document.getElementById("kpiBl").textContent = num(total.bl);
-      document.getElementById("kpiBlDelta").textContent = `${num(sourceRows.length)} rows`;
+      document.getElementById("kpiBlDelta").textContent = t().kpis.rows(sourceRows.length);
       document.getElementById("kpiTeu").textContent = num(total.teu);
       document.getElementById("kpiTeuDelta").textContent = `${state.program === "ALL" ? "EFC + LSS" : state.program}`;
     }
 
     function renderBreadcrumb() {
       const bc = document.getElementById("breadcrumb");
-      const parts = [`<button data-action="reset">전체</button>`];
+      const parts = [`<button data-action="reset">${escapeHtml(t().buttons.all)}</button>`];
       if (state.selectedOrigin) {
         parts.push(`<span>/</span><button data-action="origin">${escapeHtml(state.selectedOrigin)}</button>`);
       }
@@ -1390,31 +1597,33 @@ HTML = r"""<!doctype html>
       const items = sortAggregates(aggregate(sourceRows, groupers));
       const table = document.getElementById("mainTable");
       const title = document.getElementById("mainTitle");
-      title.textContent = `${labels[state.level]}별 징수율`;
+      title.textContent = lang === "ko"
+        ? `${t().labels[state.level]}${t().table.titleSuffix}`
+        : `${t().labels[state.level]}${t().table.titleSuffix}`;
 
       if (!items.length) {
-        table.innerHTML = `<tbody><tr><td class="empty">No data</td></tr></tbody>`;
+        table.innerHTML = `<tbody><tr><td class="empty">${escapeHtml(t().table.noData)}</td></tr></tbody>`;
         return;
       }
 
       const nameHeaders = state.level === "origin"
-        ? [headerCell("선적지", "name")]
+        ? [headerCell(t().labels.origin, "name")]
         : state.level === "lane"
-          ? [headerCell("선적지", "origin"), headerCell("도착지", "destination")]
-          : [headerCell("선적지", "origin"), headerCell("도착지", "destination"), headerCell("고객", "customer")];
+          ? [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination")]
+          : [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination"), headerCell(t().labels.customer, "customer")];
 
       table.innerHTML = `
         <thead>
           <tr>
             ${nameHeaders.join("")}
-            ${headerCell("BL", "bl", true)}
-            ${headerCell("TEU", "teu", true)}
-            ${headerCell("Tariff", "expected", true)}
-            ${headerCell("징수", "actual", true)}
-            ${headerCell("Gap", "gap", true)}
-            ${headerCell("징수율", "rate", true)}
-            ${headerCell("미/부분", "missing", true)}
-            <th>구분</th>
+            ${headerCell(t().table.bl, "bl", true)}
+            ${headerCell(t().table.teu, "teu", true)}
+            ${headerCell(t().labels.expected, "expected", true)}
+            ${headerCell(t().labels.actual, "actual", true)}
+            ${headerCell(t().labels.gap, "gap", true)}
+            ${headerCell(t().labels.rate, "rate", true)}
+            ${headerCell(t().table.issue, "missing", true)}
+            <th>${escapeHtml(t().table.category)}</th>
           </tr>
         </thead>
         <tbody>
@@ -1481,7 +1690,7 @@ HTML = r"""<!doctype html>
         .slice(0, 12);
       const chart = document.getElementById("gapChart");
       if (!items.length) {
-        chart.innerHTML = `<div class="empty">No data</div>`;
+        chart.innerHTML = `<div class="empty">${escapeHtml(t().table.noData)}</div>`;
         return;
       }
       const max = Math.max(...items.map(item => Math.abs(item[state.sortMetric]) || 0), 1);
@@ -1511,20 +1720,20 @@ HTML = r"""<!doctype html>
         .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap))
         .slice(0, 120);
       if (!items.length) {
-        table.innerHTML = `<tbody><tr><td class="empty">No exception</td></tr></tbody>`;
+        table.innerHTML = `<tbody><tr><td class="empty">${escapeHtml(t().table.noException)}</td></tr></tbody>`;
         return;
       }
       table.innerHTML = `
         <thead>
           <tr>
-            <th>Status</th><th>BL</th><th>Charge</th><th>POL</th><th>POD</th><th>고객</th>
-            <th class="num">20</th><th class="num">40</th><th class="num">Tariff</th><th class="num">징수</th><th class="num">Gap</th><th>Tariff Cat.</th>
+            <th>${escapeHtml(t().table.status)}</th><th>${escapeHtml(t().table.bl)}</th><th>${escapeHtml(t().table.charge)}</th><th>${escapeHtml(t().table.pol)}</th><th>${escapeHtml(t().table.pod)}</th><th>${escapeHtml(t().labels.customer)}</th>
+            <th class="num">20</th><th class="num">40</th><th class="num">${escapeHtml(t().labels.expected)}</th><th class="num">${escapeHtml(t().labels.actual)}</th><th class="num">${escapeHtml(t().labels.gap)}</th><th>${escapeHtml(t().table.tariffCat)}</th>
           </tr>
         </thead>
         <tbody>
           ${items.map(row => `
             <tr>
-              <td><span class="pill ${statusClass(row.status)}">${escapeHtml(row.status)}</span></td>
+              <td><span class="pill ${statusClass(row.status)}">${escapeHtml(statusText(row.status))}</span></td>
               <td>${escapeHtml(row.bl)}</td>
               <td>${escapeHtml(row.program)}</td>
               <td>${escapeHtml(row.originPort)} (${escapeHtml(row.originCountry)})</td>
@@ -1559,7 +1768,7 @@ HTML = r"""<!doctype html>
       renderMainTable(sourceRows);
       renderChart(sourceRows);
       renderExceptions(sourceRows);
-      document.getElementById("sourceMeta").textContent = `${meta.source} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped`;
+      document.getElementById("sourceMeta").textContent = t().sourceMeta(meta);
     }
 
     document.querySelectorAll("[data-segment] button").forEach(button => {
@@ -1608,6 +1817,7 @@ HTML = r"""<!doctype html>
       render();
     });
 
+    applyLang();
     checkSession();
   </script>
 </body>

@@ -8,6 +8,8 @@ GitHub Pages 배포 URL에서 `index.html` 또는 `dashboard.html`을 열면 됩
 
 상세 사용법은 대시보드 우측 상단의 `Guide` 버튼 또는 `guide.html`에서 확인할 수 있습니다. 가이드는 한국어/영어 전환을 지원합니다.
 
+대시보드와 가이드 모두 `EN`/`KO` 버튼으로 한국어/영어 전환을 지원합니다.
+
 대시보드 본문은 Google 로그인 후 표시됩니다. OAuth 앱에는 아래 값이 등록되어 있어야 합니다.
 
 - 승인된 JavaScript 원본: `https://jkpark-create.github.io`
