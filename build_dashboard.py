@@ -546,6 +546,7 @@ HTML = r"""<!doctype html>
     .control.small { grid-column: span 1; }
     .control.medium { grid-column: span 2; }
     .control.large { grid-column: span 3; }
+    .control.layer-control { grid-column: span 3; }
 
     label {
       display: block;
@@ -595,6 +596,11 @@ HTML = r"""<!doctype html>
       cursor: pointer;
       padding: 0 8px;
       min-width: 0;
+    }
+
+    .segmented[data-segment="level"] button {
+      padding: 0 6px;
+      white-space: nowrap;
     }
 
     .segmented button:last-child { border-right: 0; }
@@ -923,6 +929,7 @@ HTML = r"""<!doctype html>
     @media (max-width: 1180px) {
       .toolbar { grid-template-columns: repeat(6, minmax(0, 1fr)); }
       .control.small, .control.medium, .control.large { grid-column: span 2; }
+      .control.layer-control { grid-column: span 3; }
       .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .grid { grid-template-columns: 1fr; }
     }
@@ -933,6 +940,7 @@ HTML = r"""<!doctype html>
       main { padding: 14px 12px 22px; }
       .toolbar { grid-template-columns: 1fr; }
       .control.small, .control.medium, .control.large { grid-column: span 1; }
+      .control.layer-control { grid-column: span 1; }
       .kpis { grid-template-columns: 1fr; }
       .metric .value { font-size: 22px; }
       .bar-row { grid-template-columns: 92px minmax(0, 1fr) 74px; }
@@ -989,7 +997,7 @@ HTML = r"""<!doctype html>
           <button data-value="LSS CN→JP">LSS</button>
         </div>
       </div>
-      <div class="control medium">
+      <div class="control medium layer-control">
         <label>Layer</label>
         <div class="segmented" data-segment="level">
           <button data-value="origin" class="active">선적지</button>
