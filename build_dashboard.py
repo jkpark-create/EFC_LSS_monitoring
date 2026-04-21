@@ -1119,6 +1119,12 @@ HTML = r"""<!doctype html>
       return sign + "$" + Math.abs(rounded).toLocaleString("en-US");
     }
 
+    function signedUsd(value) {
+      const rounded = Math.round(value || 0);
+      const sign = rounded > 0 ? "+" : rounded < 0 ? "-" : "";
+      return sign + "$" + Math.abs(rounded).toLocaleString("en-US");
+    }
+
     function num(value) {
       return Math.round(value || 0).toLocaleString("en-US");
     }
@@ -1537,7 +1543,7 @@ HTML = r"""<!doctype html>
       document.getElementById("kpiExpectedDelta").textContent = t().kpis.qty(total.qty20, total.qty40);
       document.getElementById("kpiActual").textContent = usd(total.actual);
       document.getElementById("kpiActualDelta").textContent = t().kpis.overCheck(total.over, total.check);
-      document.getElementById("kpiGap").textContent = usd(total.gap);
+      document.getElementById("kpiGap").textContent = signedUsd(total.gap);
       document.getElementById("kpiGapDelta").textContent = total.gap < 0 ? t().kpis.shortfall : t().kpis.overCollected;
       document.getElementById("kpiBl").textContent = num(total.bl);
       document.getElementById("kpiBlDelta").textContent = t().kpis.rows(sourceRows.length);
@@ -1643,7 +1649,7 @@ HTML = r"""<!doctype html>
                 <td class="num">${num(item.teu)}</td>
                 <td class="num">${usd(item.expected)}</td>
                 <td class="num">${usd(item.actual)}</td>
-                <td class="num">${usd(item.gap)}</td>
+                <td class="num">${signedUsd(item.gap)}</td>
                 <td class="num">${pct(item.rate)}</td>
                 <td class="num">${num(issueCount)}</td>
                 <td>${escapeHtml(item.programText)}</td>
@@ -1702,7 +1708,7 @@ HTML = r"""<!doctype html>
         const gapWidth = Math.min(100, Math.abs(value) / max * 100);
         const actualWidth = item.expected > 0 ? Math.min(100, item.actual / item.expected * 100) : 0;
         const label = item.labels[item.labels.length - 1];
-        const metricValue = state.sortMetric === "rate" ? pct(value) : usd(value);
+        const metricValue = state.sortMetric === "rate" ? pct(value) : state.sortMetric === "gap" ? signedUsd(value) : usd(value);
         return `
           <div class="bar-row" title="${escapeHtml(item.labels.join(" > "))}">
             <div class="bar-label">${escapeHtml(label)}</div>
@@ -1746,7 +1752,7 @@ HTML = r"""<!doctype html>
               <td class="num">${num(row.qty40)}</td>
               <td class="num">${usd(row.expected)}</td>
               <td class="num">${usd(row.actual)}</td>
-              <td class="num">${usd(row.gap)}</td>
+              <td class="num">${signedUsd(row.gap)}</td>
               <td>${escapeHtml(row.tariffCategory)}</td>
             </tr>
           `).join("")}

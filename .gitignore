@@ -7,3 +7,4 @@ downloads/
 *.bak
 *.xlsx
 *.xls
+__pycache__/

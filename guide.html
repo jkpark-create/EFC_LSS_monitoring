@@ -313,7 +313,7 @@ document.addEventListener('DOMContentLoaded',function(){
     <tr><td>징수율</td><td>Tariff 기대액 대비 실제 징수액 비율</td><td><code>실제 징수액 / Tariff 기대액</code>. 95~105%는 정상 범위로 판단합니다.</td></tr>
     <tr><td>Tariff 기대액</td><td>타리프 기준으로 받아야 할 금액</td><td><code>20갯수 * 20DRY tariff + 40갯수 * 40DRY tariff</code></td></tr>
     <tr><td>실제 징수액</td><td>원본에 입력된 실제 EFC 또는 LSS 합계</td><td>EFC는 <code>20 efc + 40 efc</code>, LSS는 <code>20 lss + 40 lss</code></td></tr>
-    <tr><td>Gap</td><td>실제액과 기대액 차이</td><td><code>실제 징수액 - Tariff 기대액</code>. 음수는 부족(shortfall), 양수는 초과징수입니다.</td></tr>
+    <tr><td>Gap</td><td>실제액과 기대액 차이</td><td><code>실제 징수액 - Tariff 기대액</code>. 음수는 <code>-$</code> 부족(shortfall), 양수는 <code>+$</code> 초과징수로 표시합니다.</td></tr>
     <tr><td>대상 BL</td><td>필터 후 남은 고유 BL 수</td><td>같은 BL이 여러 row로 나뉘어도 BL 수는 중복 제거됩니다.</td></tr>
     <tr><td>TEU</td><td>필터 후 대상 TEU 합계</td><td>원본 <code>전체 teu</code> 합계입니다.</td></tr>
   </table>
@@ -324,7 +324,7 @@ document.addEventListener('DOMContentLoaded',function(){
     <tr><td>Collection Rate</td><td>Actual collection vs tariff expectation</td><td><code>Actual / Expected</code>. 95-105% is treated as normal.</td></tr>
     <tr><td>Tariff Expected</td><td>Amount expected by tariff</td><td><code>20 qty * 20DRY tariff + 40 qty * 40DRY tariff</code></td></tr>
     <tr><td>Actual Collection</td><td>Actual EFC or LSS amount from the source</td><td>EFC: <code>20 efc + 40 efc</code>, LSS: <code>20 lss + 40 lss</code></td></tr>
-    <tr><td>Gap</td><td>Difference between actual and expected</td><td><code>Actual - Expected</code>. Negative means shortfall; positive means over-collected.</td></tr>
+    <tr><td>Gap</td><td>Difference between actual and expected</td><td><code>Actual - Expected</code>. Negative values display as <code>-$</code> shortfall; positive values display as <code>+$</code> over-collected.</td></tr>
     <tr><td>Target BL</td><td>Unique BL count after filtering</td><td>Duplicate BL rows are counted once.</td></tr>
     <tr><td>TEU</td><td>Total TEU after filtering</td><td>Sum of source <code>전체 teu</code>.</td></tr>
   </table>
