@@ -1018,7 +1018,7 @@ HTML = r"""<!doctype html>
         table: {
           titleSuffix: "별 징수율", noData: "데이터 없음", noException: "예외 없음",
           bl: "BL", teu: "TEU", issue: "미/부분", category: "구분", status: "Status",
-          charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+          bookingShipper: "Booking Shipper", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "구분",
@@ -1074,7 +1074,7 @@ HTML = r"""<!doctype html>
         table: {
           titleSuffix: " Collection Rate", noData: "No data", noException: "No exception",
           bl: "BL", teu: "TEU", issue: "Missing/Partial", category: "Category", status: "Status",
-          charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+          bookingShipper: "Booking Shipper", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "Category",
@@ -1735,7 +1735,7 @@ HTML = r"""<!doctype html>
       table.innerHTML = `
         <thead>
           <tr>
-            <th>${escapeHtml(t().table.status)}</th><th>${escapeHtml(t().table.bl)}</th><th>${escapeHtml(t().table.charge)}</th><th>${escapeHtml(t().table.pol)}</th><th>${escapeHtml(t().table.pod)}</th><th>${escapeHtml(t().labels.customer)}</th>
+            <th>${escapeHtml(t().table.status)}</th><th>${escapeHtml(t().table.bl)}</th><th>${escapeHtml(t().table.bookingShipper)}</th><th>${escapeHtml(t().table.charge)}</th><th>${escapeHtml(t().table.pol)}</th><th>${escapeHtml(t().table.pod)}</th><th>${escapeHtml(t().labels.customer)}</th>
             <th class="num">20</th><th class="num">40</th><th class="num">${escapeHtml(t().labels.expected)}</th><th class="num">${escapeHtml(t().labels.actual)}</th><th class="num">${escapeHtml(t().labels.gap)}</th><th>${escapeHtml(t().table.tariffCat)}</th>
           </tr>
         </thead>
@@ -1744,6 +1744,7 @@ HTML = r"""<!doctype html>
             <tr>
               <td><span class="pill ${statusClass(row.status)}">${escapeHtml(statusText(row.status))}</span></td>
               <td>${escapeHtml(row.bl)}</td>
+              <td>${escapeHtml(safe(row.bookingShipper))}</td>
               <td>${escapeHtml(row.program)}</td>
               <td>${escapeHtml(row.originPort)} (${escapeHtml(row.originCountry)})</td>
               <td>${escapeHtml(row.destinationPort)} (${escapeHtml(row.destinationCountry)})</td>
