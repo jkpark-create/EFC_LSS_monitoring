@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -9,6 +11,7 @@ from pathlib import Path
 SOURCE_CSV = Path("DynamicList.CSV")
 OUTPUT_FILES = (Path("index.html"), Path("dashboard.html"))
 DATA_FILE = Path("data.json")
+SALES_SOURCE_JSON = Path(os.getenv("THREE_W_DATA_JSON", "../-3W bkg dashboard/dist/data.json"))
 SOURCE_ENCODINGS = ("cp949", "utf-8-sig", "utf-8")
 
 EFC_EXCLUDED_ORIGINS = {"", "CN", "KR", "JP", "US"}
@@ -38,6 +41,67 @@ def number(value: object) -> float:
 
 def whole(value: float) -> int | float:
     return int(value) if float(value).is_integer() else round(value, 2)
+
+
+def key_code(value: object) -> str:
+    return clean(value).upper()
+
+
+def normalize_salesperson(value: object) -> str:
+    text = clean(value)
+    if not text:
+        return ""
+    names: list[str] = []
+    seen: set[str] = set()
+    for name in re.split(r"[,;]+", text):
+        normalized = clean(name).upper()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            names.append(normalized)
+    return ", ".join(names)
+
+
+def load_salesperson_lookup() -> tuple[dict[str, str], dict]:
+    meta = {
+        "source": str(SALES_SOURCE_JSON),
+        "found": SALES_SOURCE_JSON.exists(),
+        "sourceRows": 0,
+        "mappingKeys": 0,
+        "duplicateKeys": 0,
+    }
+    if not SALES_SOURCE_JSON.exists():
+        return {}, meta
+
+    payload = json.loads(SALES_SOURCE_JSON.read_text(encoding="utf-8"))
+    shipper_rows = payload.get("shipper", [])
+    meta["sourceRows"] = len(shipper_rows)
+
+    weighted: dict[str, Counter] = {}
+    for row in shipper_rows:
+        origin_port = key_code(row.get("ori_port") or row.get("POR_PLC_CD"))
+        booking_shipper = key_code(row.get("BKG_SHPR_CST_NO"))
+        salesperson = normalize_salesperson(row.get("Salesman_POR"))
+        if not origin_port or not booking_shipper or not salesperson:
+            continue
+
+        key = f"{origin_port}|{booking_shipper}"
+        weight = number(row.get("fst")) or number(row.get("norm_lst")) or 1
+        weighted.setdefault(key, Counter())[salesperson] += weight
+
+    lookup: dict[str, str] = {}
+    duplicate_keys = 0
+    for key, counter in weighted.items():
+        if len(counter) > 1:
+            duplicate_keys += 1
+        salesperson = sorted(
+            counter.items(),
+            key=lambda item: (-item[1], -len(item[0].split(",")), item[0]),
+        )[0][0]
+        lookup[key] = salesperson
+
+    meta["mappingKeys"] = len(lookup)
+    meta["duplicateKeys"] = duplicate_keys
+    return lookup, meta
 
 
 def efc_destination_rule(dest_country: str, dest_port: str) -> tuple[str, int, int] | None:
@@ -99,6 +163,11 @@ def read_rows() -> tuple[list[dict], dict]:
     skipped_summary = 0
     skipped_no_freight = 0
     raw_rows = 0
+    salesperson_lookup, sales_meta = load_salesperson_lookup()
+    sales_matched_rows = 0
+    sales_unmatched_rows = 0
+    sales_matched_keys: set[str] = set()
+    sales_unmatched_keys: set[str] = set()
 
     with SOURCE_CSV.open("r", encoding=detect_source_encoding(SOURCE_CSV), newline="") as f:
         reader = csv.DictReader(f)
@@ -162,6 +231,14 @@ def read_rows() -> tuple[list[dict], dict]:
 
             booking_shipper = clean(row.get("booking shipper"))
             handling_consignee = clean(row.get("handling consignee"))
+            sales_key = f"{key_code(origin_port)}|{key_code(booking_shipper)}"
+            salesperson = salesperson_lookup.get(sales_key, "") if booking_shipper and origin_port else ""
+            if salesperson:
+                sales_matched_rows += 1
+                sales_matched_keys.add(sales_key)
+            elif booking_shipper and origin_port:
+                sales_unmatched_rows += 1
+                sales_unmatched_keys.add(sales_key)
             status = status_for(expected, actual)
             gap = actual - expected
 
@@ -180,6 +257,7 @@ def read_rows() -> tuple[list[dict], dict]:
                     "destinationPort": dest_port,
                     "bookingShipper": booking_shipper,
                     "handlingConsignee": handling_consignee,
+                    "salesperson": salesperson,
                     "bl": clean(row.get("bl번호")),
                     "pc": clean(row.get("p/c")),
                     "qty20": whole(qty20),
@@ -209,6 +287,13 @@ def read_rows() -> tuple[list[dict], dict]:
         "skippedNoFreightRows": skipped_no_freight,
         "programCounts": dict(Counter(r["program"] for r in records)),
         "statusCounts": dict(Counter(r["status"] for r in records)),
+        "salesMapping": {
+            **sales_meta,
+            "matchedRows": sales_matched_rows,
+            "unmatchedRows": sales_unmatched_rows,
+            "matchedKeys": len(sales_matched_keys),
+            "unmatchedKeys": len(sales_unmatched_keys),
+        },
     }
     return records, meta
 
@@ -818,6 +903,7 @@ HTML = r"""<!doctype html>
           <button data-value="origin" class="active">선적지</button>
           <button data-value="lane">Lane</button>
           <button data-value="customer">고객</button>
+          <button data-value="salesperson">영업사원</button>
         </div>
       </div>
       <div class="control medium">
@@ -849,6 +935,10 @@ HTML = r"""<!doctype html>
       <div class="control medium">
         <label>Status</label>
         <select id="statusFilter"></select>
+      </div>
+      <div class="control medium">
+        <label>Salesperson</label>
+        <select id="salespersonFilter"></select>
       </div>
       <div class="control medium">
         <label>선적지</label>
@@ -992,16 +1082,21 @@ HTML = r"""<!doctype html>
         domainDenied: domain => `${domain || "Unknown"} 도메인은 접근할 수 없습니다.`,
         lssBasis: "CN→JP LSS USD 150/300",
         efcBasis: "EFC DRY tariff basis",
-        sourceMeta: meta => `${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows`,
+        sourceMeta: meta => {
+          const sales = meta.salesMapping && meta.salesMapping.found
+            ? ` · 영업사원 ${num(meta.salesMapping.matchedRows)} rows 매핑`
+            : " · 영업사원 매핑 없음";
+          return `${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows${sales}`;
+        },
         filters: {
           charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
-          week: "Week", pc: "P/C", status: "Status", originSelect: "선적지", destination: "도착지", search: "Search",
+          week: "Week", pc: "P/C", status: "Status", salesperson: "영업사원", originSelect: "선적지", destination: "도착지", search: "Search",
         },
         buttons: {
-          all: "전체", origin: "선적지", lane: "Lane", customer: "고객", country: "국가",
+          all: "전체", origin: "선적지", lane: "Lane", customer: "고객", salesperson: "영업사원", country: "국가",
           shipper: "Shipper", cnee: "CNEE", gap: "Gap", tariff: "Tariff", rate: "징수율",
         },
-        searchPlaceholder: "BL / 고객 / Port / Route",
+        searchPlaceholder: "BL / 고객 / 영업사원 / Port / Route",
         kpis: {
           rate: "징수율", expected: "Tariff 기대액", actual: "실제 징수액", gap: "Gap", bl: "대상 BL", teu: "TEU",
           underCollected: count => `${num(count)} under-collected rows`,
@@ -1012,13 +1107,13 @@ HTML = r"""<!doctype html>
           rows: count => `${num(count)} rows`,
         },
         labels: {
-          origin: "선적지", lane: "선적지-도착지", customer: "고객",
+          origin: "선적지", lane: "선적지-도착지", customer: "고객", salesperson: "영업사원",
           expected: "Tariff", actual: "징수", gap: "Gap", rate: "징수율",
         },
         table: {
           titleSuffix: "별 징수율", noData: "데이터 없음", noException: "예외 없음",
           bl: "BL", teu: "TEU", issue: "미/부분", category: "구분", status: "Status",
-          bookingShipper: "Booking Shipper", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+          bookingShipper: "Booking Shipper", salesperson: "영업사원", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "구분",
@@ -1048,16 +1143,21 @@ HTML = r"""<!doctype html>
         domainDenied: domain => `${domain || "Unknown"} domain is not allowed.`,
         lssBasis: "CN→JP LSS USD 150/300",
         efcBasis: "EFC DRY tariff basis",
-        sourceMeta: meta => `${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped`,
+        sourceMeta: meta => {
+          const sales = meta.salesMapping && meta.salesMapping.found
+            ? ` · ${num(meta.salesMapping.matchedRows)} rows sales-mapped`
+            : " · no salesperson mapping";
+          return `${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped${sales}`;
+        },
         filters: {
           charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
-          week: "Week", pc: "P/C", status: "Status", originSelect: "Origin", destination: "Destination", search: "Search",
+          week: "Week", pc: "P/C", status: "Status", salesperson: "Salesperson", originSelect: "Origin", destination: "Destination", search: "Search",
         },
         buttons: {
-          all: "All", origin: "Origin", lane: "Lane", customer: "Customer", country: "Country",
+          all: "All", origin: "Origin", lane: "Lane", customer: "Customer", salesperson: "Sales", country: "Country",
           shipper: "Shipper", cnee: "CNEE", gap: "Gap", tariff: "Tariff", rate: "Rate",
         },
-        searchPlaceholder: "BL / customer / port / route",
+        searchPlaceholder: "BL / customer / salesperson / port / route",
         kpis: {
           rate: "Collection Rate", expected: "Tariff Expected", actual: "Actual Collection", gap: "Gap", bl: "Target BL", teu: "TEU",
           underCollected: count => `${num(count)} under-collected rows`,
@@ -1068,13 +1168,13 @@ HTML = r"""<!doctype html>
           rows: count => `${num(count)} rows`,
         },
         labels: {
-          origin: "Origin", lane: "Lane", customer: "Customer",
+          origin: "Origin", lane: "Lane", customer: "Customer", salesperson: "Salesperson",
           expected: "Tariff", actual: "Actual", gap: "Gap", rate: "Rate",
         },
         table: {
           titleSuffix: " Collection Rate", noData: "No data", noException: "No exception",
           bl: "BL", teu: "TEU", issue: "Missing/Partial", category: "Category", status: "Status",
-          bookingShipper: "Booking Shipper", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+          bookingShipper: "Booking Shipper", salesperson: "Salesperson", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "Category",
@@ -1101,6 +1201,7 @@ HTML = r"""<!doctype html>
       week: "ALL",
       pc: "ALL",
       status: "ALL",
+      salesperson: "ALL",
       origin: "ALL",
       destination: "ALL",
       search: "",
@@ -1171,11 +1272,15 @@ HTML = r"""<!doctype html>
       return safe(value, t().unassigned);
     }
 
+    function salespersonValue(row) {
+      return safe(row.salesperson, t().unassigned);
+    }
+
     function matchesSearch(row, term) {
       if (!term) return true;
       const text = [
         row.bl, row.bookingShipper, row.handlingConsignee, row.originCountry, row.originPort,
-        row.destinationCountry, row.destinationPort, row.route, row.vessel, row.voyage,
+        row.salesperson, row.destinationCountry, row.destinationPort, row.route, row.vessel, row.voyage,
         row.tariffCategory, row.status,
       ].join(" ").toLowerCase();
       return text.includes(term);
@@ -1189,6 +1294,7 @@ HTML = r"""<!doctype html>
         if (state.week !== "ALL" && row.week !== state.week) return false;
         if (state.pc !== "ALL" && row.pc !== state.pc) return false;
         if (state.status !== "ALL" && row.status !== state.status) return false;
+        if (state.salesperson !== "ALL" && salespersonValue(row) !== state.salesperson) return false;
         if (state.origin !== "ALL" && originValue(row) !== state.origin) return false;
         if (state.destination !== "ALL" && row.destinationPort !== state.destination) return false;
         if (state.selectedOrigin && originValue(row) !== state.selectedOrigin) return false;
@@ -1222,6 +1328,7 @@ HTML = r"""<!doctype html>
             check: 0,
             programs: new Set(),
             categories: new Set(),
+            salespeople: new Set(),
           });
         }
         const item = map.get(key);
@@ -1239,6 +1346,7 @@ HTML = r"""<!doctype html>
         if (row.status === "수량확인") item.check += 1;
         item.programs.add(row.program);
         item.categories.add(row.tariffCategory);
+        if (row.salesperson) item.salespeople.add(row.salesperson);
       }
       return Array.from(map.values()).map(item => ({
         ...item,
@@ -1246,6 +1354,7 @@ HTML = r"""<!doctype html>
         rate: item.expected > 0 ? item.actual / item.expected : NaN,
         programText: Array.from(item.programs).join(", "),
         categoryText: Array.from(item.categories).slice(0, 3).join(", "),
+        salesText: Array.from(item.salespeople).sort().slice(0, 3).join(", ") + (item.salespeople.size > 3 ? "..." : ""),
         sortLabel: item.labels.join(" > "),
       }));
     }
@@ -1263,8 +1372,13 @@ HTML = r"""<!doctype html>
         value: row => customerValue(row),
         label: row => customerValue(row),
       };
+      const salesperson = {
+        value: row => salespersonValue(row),
+        label: row => salespersonValue(row),
+      };
       if (state.level === "origin") return [origin];
       if (state.level === "lane") return [origin, destination];
+      if (state.level === "salesperson") return [origin, destination, salesperson];
       return [origin, destination, customer];
     }
 
@@ -1349,14 +1463,14 @@ HTML = r"""<!doctype html>
       [
         ui.filters.charge, ui.filters.layer, ui.filters.origin, ui.filters.customer,
         ui.filters.month, ui.filters.week, ui.filters.pc, ui.filters.status,
-        ui.filters.originSelect, ui.filters.destination, ui.filters.search,
+        ui.filters.salesperson, ui.filters.originSelect, ui.filters.destination, ui.filters.search,
       ].forEach((label, index) => {
         if (filterLabels[index]) filterLabels[index].textContent = label;
       });
 
       const buttonLabels = {
         program: { ALL: ui.buttons.all, "EFC non-CN": "EFC", "LSS CN→JP": "LSS" },
-        level: { origin: ui.buttons.origin, lane: ui.buttons.lane, customer: ui.buttons.customer },
+        level: { origin: ui.buttons.origin, lane: ui.buttons.lane, customer: ui.buttons.customer, salesperson: ui.buttons.salesperson },
         originBasis: { originPort: "POL", originCountry: ui.buttons.country },
         customerBasis: { bookingShipper: ui.buttons.shipper, handlingConsignee: ui.buttons.cnee },
         sortMetric: { gap: ui.buttons.gap, expected: ui.buttons.tariff, rate: ui.buttons.rate },
@@ -1523,6 +1637,7 @@ HTML = r"""<!doctype html>
       fillSelect("weekFilter", rows.map(r => r.week), state.week, v => `W${v}`);
       fillSelect("pcFilter", rows.map(r => r.pc), state.pc);
       fillSelect("statusFilter", ["정상", "부분징수", "미징수", "초과징수", "수량확인", "수량없음"], state.status, statusText);
+      fillSelect("salespersonFilter", rows.map(salespersonValue), state.salesperson);
       updateOriginDestinationFilters();
     }
 
@@ -1618,7 +1733,9 @@ HTML = r"""<!doctype html>
         ? [headerCell(t().labels.origin, "name")]
         : state.level === "lane"
           ? [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination")]
-          : [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination"), headerCell(t().labels.customer, "customer")];
+          : state.level === "salesperson"
+            ? [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination"), headerCell(t().labels.salesperson, "salesperson")]
+            : [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination"), headerCell(t().labels.customer, "customer"), headerCell(t().labels.salesperson, "salesText")];
 
       table.innerHTML = `
         <thead>
@@ -1640,7 +1757,9 @@ HTML = r"""<!doctype html>
               ? `<td>${escapeHtml(item.labels[0])}</td>`
               : state.level === "lane"
                 ? `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td>`
-                : `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td><td>${escapeHtml(item.labels[2])}</td>`;
+                : state.level === "salesperson"
+                  ? `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td><td>${escapeHtml(item.labels[2])}</td>`
+                  : `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td><td>${escapeHtml(item.labels[2])}</td><td>${escapeHtml(safe(item.salesText))}</td>`;
             const issueCount = item.missing + item.partial;
             return `
               <tr class="data-row" data-parts="${escapeHtml(JSON.stringify(item.parts))}">
@@ -1735,7 +1854,7 @@ HTML = r"""<!doctype html>
       table.innerHTML = `
         <thead>
           <tr>
-            <th>${escapeHtml(t().table.status)}</th><th>${escapeHtml(t().table.bl)}</th><th>${escapeHtml(t().table.bookingShipper)}</th><th>${escapeHtml(t().table.charge)}</th><th>${escapeHtml(t().table.pol)}</th><th>${escapeHtml(t().table.pod)}</th><th>${escapeHtml(t().labels.customer)}</th>
+            <th>${escapeHtml(t().table.status)}</th><th>${escapeHtml(t().table.bl)}</th><th>${escapeHtml(t().table.bookingShipper)}</th><th>${escapeHtml(t().table.salesperson)}</th><th>${escapeHtml(t().table.charge)}</th><th>${escapeHtml(t().table.pol)}</th><th>${escapeHtml(t().table.pod)}</th><th>${escapeHtml(t().labels.customer)}</th>
             <th class="num">20</th><th class="num">40</th><th class="num">${escapeHtml(t().labels.expected)}</th><th class="num">${escapeHtml(t().labels.actual)}</th><th class="num">${escapeHtml(t().labels.gap)}</th><th>${escapeHtml(t().table.tariffCat)}</th>
           </tr>
         </thead>
@@ -1745,6 +1864,7 @@ HTML = r"""<!doctype html>
               <td><span class="pill ${statusClass(row.status)}">${escapeHtml(statusText(row.status))}</span></td>
               <td>${escapeHtml(row.bl)}</td>
               <td>${escapeHtml(safe(row.bookingShipper))}</td>
+              <td>${escapeHtml(salespersonValue(row))}</td>
               <td>${escapeHtml(row.program)}</td>
               <td>${escapeHtml(row.originPort)} (${escapeHtml(row.originCountry)})</td>
               <td>${escapeHtml(row.destinationPort)} (${escapeHtml(row.destinationCountry)})</td>
@@ -1794,6 +1914,7 @@ HTML = r"""<!doctype html>
         if (key === "program") {
           state.origin = "ALL";
           state.destination = "ALL";
+          state.salesperson = "ALL";
           state.selectedOrigin = "";
           state.selectedDestination = "";
         }
@@ -1814,6 +1935,7 @@ HTML = r"""<!doctype html>
     document.getElementById("weekFilter").addEventListener("change", event => { state.week = event.target.value; render(); });
     document.getElementById("pcFilter").addEventListener("change", event => { state.pc = event.target.value; render(); });
     document.getElementById("statusFilter").addEventListener("change", event => { state.status = event.target.value; render(); });
+    document.getElementById("salespersonFilter").addEventListener("change", event => { state.salesperson = event.target.value; render(); });
     document.getElementById("originFilter").addEventListener("change", event => {
       state.origin = event.target.value;
       state.selectedOrigin = "";

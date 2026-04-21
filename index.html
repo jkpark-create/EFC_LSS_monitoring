@@ -603,6 +603,7 @@
           <button data-value="origin" class="active">선적지</button>
           <button data-value="lane">Lane</button>
           <button data-value="customer">고객</button>
+          <button data-value="salesperson">영업사원</button>
         </div>
       </div>
       <div class="control medium">
@@ -634,6 +635,10 @@
       <div class="control medium">
         <label>Status</label>
         <select id="statusFilter"></select>
+      </div>
+      <div class="control medium">
+        <label>Salesperson</label>
+        <select id="salespersonFilter"></select>
       </div>
       <div class="control medium">
         <label>선적지</label>
@@ -777,16 +782,21 @@
         domainDenied: domain => `${domain || "Unknown"} 도메인은 접근할 수 없습니다.`,
         lssBasis: "CN→JP LSS USD 150/300",
         efcBasis: "EFC DRY tariff basis",
-        sourceMeta: meta => `${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows`,
+        sourceMeta: meta => {
+          const sales = meta.salesMapping && meta.salesMapping.found
+            ? ` · 영업사원 ${num(meta.salesMapping.matchedRows)} rows 매핑`
+            : " · 영업사원 매핑 없음";
+          return `${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows${sales}`;
+        },
         filters: {
           charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
-          week: "Week", pc: "P/C", status: "Status", originSelect: "선적지", destination: "도착지", search: "Search",
+          week: "Week", pc: "P/C", status: "Status", salesperson: "영업사원", originSelect: "선적지", destination: "도착지", search: "Search",
         },
         buttons: {
-          all: "전체", origin: "선적지", lane: "Lane", customer: "고객", country: "국가",
+          all: "전체", origin: "선적지", lane: "Lane", customer: "고객", salesperson: "영업사원", country: "국가",
           shipper: "Shipper", cnee: "CNEE", gap: "Gap", tariff: "Tariff", rate: "징수율",
         },
-        searchPlaceholder: "BL / 고객 / Port / Route",
+        searchPlaceholder: "BL / 고객 / 영업사원 / Port / Route",
         kpis: {
           rate: "징수율", expected: "Tariff 기대액", actual: "실제 징수액", gap: "Gap", bl: "대상 BL", teu: "TEU",
           underCollected: count => `${num(count)} under-collected rows`,
@@ -797,13 +807,13 @@
           rows: count => `${num(count)} rows`,
         },
         labels: {
-          origin: "선적지", lane: "선적지-도착지", customer: "고객",
+          origin: "선적지", lane: "선적지-도착지", customer: "고객", salesperson: "영업사원",
           expected: "Tariff", actual: "징수", gap: "Gap", rate: "징수율",
         },
         table: {
           titleSuffix: "별 징수율", noData: "데이터 없음", noException: "예외 없음",
           bl: "BL", teu: "TEU", issue: "미/부분", category: "구분", status: "Status",
-          bookingShipper: "Booking Shipper", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+          bookingShipper: "Booking Shipper", salesperson: "영업사원", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "구분",
@@ -833,16 +843,21 @@
         domainDenied: domain => `${domain || "Unknown"} domain is not allowed.`,
         lssBasis: "CN→JP LSS USD 150/300",
         efcBasis: "EFC DRY tariff basis",
-        sourceMeta: meta => `${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped`,
+        sourceMeta: meta => {
+          const sales = meta.salesMapping && meta.salesMapping.found
+            ? ` · ${num(meta.salesMapping.matchedRows)} rows sales-mapped`
+            : " · no salesperson mapping";
+          return `${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped${sales}`;
+        },
         filters: {
           charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
-          week: "Week", pc: "P/C", status: "Status", originSelect: "Origin", destination: "Destination", search: "Search",
+          week: "Week", pc: "P/C", status: "Status", salesperson: "Salesperson", originSelect: "Origin", destination: "Destination", search: "Search",
         },
         buttons: {
-          all: "All", origin: "Origin", lane: "Lane", customer: "Customer", country: "Country",
+          all: "All", origin: "Origin", lane: "Lane", customer: "Customer", salesperson: "Sales", country: "Country",
           shipper: "Shipper", cnee: "CNEE", gap: "Gap", tariff: "Tariff", rate: "Rate",
         },
-        searchPlaceholder: "BL / customer / port / route",
+        searchPlaceholder: "BL / customer / salesperson / port / route",
         kpis: {
           rate: "Collection Rate", expected: "Tariff Expected", actual: "Actual Collection", gap: "Gap", bl: "Target BL", teu: "TEU",
           underCollected: count => `${num(count)} under-collected rows`,
@@ -853,13 +868,13 @@
           rows: count => `${num(count)} rows`,
         },
         labels: {
-          origin: "Origin", lane: "Lane", customer: "Customer",
+          origin: "Origin", lane: "Lane", customer: "Customer", salesperson: "Salesperson",
           expected: "Tariff", actual: "Actual", gap: "Gap", rate: "Rate",
         },
         table: {
           titleSuffix: " Collection Rate", noData: "No data", noException: "No exception",
           bl: "BL", teu: "TEU", issue: "Missing/Partial", category: "Category", status: "Status",
-          bookingShipper: "Booking Shipper", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+          bookingShipper: "Booking Shipper", salesperson: "Salesperson", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "Category",
@@ -886,6 +901,7 @@
       week: "ALL",
       pc: "ALL",
       status: "ALL",
+      salesperson: "ALL",
       origin: "ALL",
       destination: "ALL",
       search: "",
@@ -956,11 +972,15 @@
       return safe(value, t().unassigned);
     }
 
+    function salespersonValue(row) {
+      return safe(row.salesperson, t().unassigned);
+    }
+
     function matchesSearch(row, term) {
       if (!term) return true;
       const text = [
         row.bl, row.bookingShipper, row.handlingConsignee, row.originCountry, row.originPort,
-        row.destinationCountry, row.destinationPort, row.route, row.vessel, row.voyage,
+        row.salesperson, row.destinationCountry, row.destinationPort, row.route, row.vessel, row.voyage,
         row.tariffCategory, row.status,
       ].join(" ").toLowerCase();
       return text.includes(term);
@@ -974,6 +994,7 @@
         if (state.week !== "ALL" && row.week !== state.week) return false;
         if (state.pc !== "ALL" && row.pc !== state.pc) return false;
         if (state.status !== "ALL" && row.status !== state.status) return false;
+        if (state.salesperson !== "ALL" && salespersonValue(row) !== state.salesperson) return false;
         if (state.origin !== "ALL" && originValue(row) !== state.origin) return false;
         if (state.destination !== "ALL" && row.destinationPort !== state.destination) return false;
         if (state.selectedOrigin && originValue(row) !== state.selectedOrigin) return false;
@@ -1007,6 +1028,7 @@
             check: 0,
             programs: new Set(),
             categories: new Set(),
+            salespeople: new Set(),
           });
         }
         const item = map.get(key);
@@ -1024,6 +1046,7 @@
         if (row.status === "수량확인") item.check += 1;
         item.programs.add(row.program);
         item.categories.add(row.tariffCategory);
+        if (row.salesperson) item.salespeople.add(row.salesperson);
       }
       return Array.from(map.values()).map(item => ({
         ...item,
@@ -1031,6 +1054,7 @@
         rate: item.expected > 0 ? item.actual / item.expected : NaN,
         programText: Array.from(item.programs).join(", "),
         categoryText: Array.from(item.categories).slice(0, 3).join(", "),
+        salesText: Array.from(item.salespeople).sort().slice(0, 3).join(", ") + (item.salespeople.size > 3 ? "..." : ""),
         sortLabel: item.labels.join(" > "),
       }));
     }
@@ -1048,8 +1072,13 @@
         value: row => customerValue(row),
         label: row => customerValue(row),
       };
+      const salesperson = {
+        value: row => salespersonValue(row),
+        label: row => salespersonValue(row),
+      };
       if (state.level === "origin") return [origin];
       if (state.level === "lane") return [origin, destination];
+      if (state.level === "salesperson") return [origin, destination, salesperson];
       return [origin, destination, customer];
     }
 
@@ -1134,14 +1163,14 @@
       [
         ui.filters.charge, ui.filters.layer, ui.filters.origin, ui.filters.customer,
         ui.filters.month, ui.filters.week, ui.filters.pc, ui.filters.status,
-        ui.filters.originSelect, ui.filters.destination, ui.filters.search,
+        ui.filters.salesperson, ui.filters.originSelect, ui.filters.destination, ui.filters.search,
       ].forEach((label, index) => {
         if (filterLabels[index]) filterLabels[index].textContent = label;
       });
 
       const buttonLabels = {
         program: { ALL: ui.buttons.all, "EFC non-CN": "EFC", "LSS CN→JP": "LSS" },
-        level: { origin: ui.buttons.origin, lane: ui.buttons.lane, customer: ui.buttons.customer },
+        level: { origin: ui.buttons.origin, lane: ui.buttons.lane, customer: ui.buttons.customer, salesperson: ui.buttons.salesperson },
         originBasis: { originPort: "POL", originCountry: ui.buttons.country },
         customerBasis: { bookingShipper: ui.buttons.shipper, handlingConsignee: ui.buttons.cnee },
         sortMetric: { gap: ui.buttons.gap, expected: ui.buttons.tariff, rate: ui.buttons.rate },
@@ -1308,6 +1337,7 @@
       fillSelect("weekFilter", rows.map(r => r.week), state.week, v => `W${v}`);
       fillSelect("pcFilter", rows.map(r => r.pc), state.pc);
       fillSelect("statusFilter", ["정상", "부분징수", "미징수", "초과징수", "수량확인", "수량없음"], state.status, statusText);
+      fillSelect("salespersonFilter", rows.map(salespersonValue), state.salesperson);
       updateOriginDestinationFilters();
     }
 
@@ -1403,7 +1433,9 @@
         ? [headerCell(t().labels.origin, "name")]
         : state.level === "lane"
           ? [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination")]
-          : [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination"), headerCell(t().labels.customer, "customer")];
+          : state.level === "salesperson"
+            ? [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination"), headerCell(t().labels.salesperson, "salesperson")]
+            : [headerCell(t().labels.origin, "origin"), headerCell(t().filters.destination, "destination"), headerCell(t().labels.customer, "customer"), headerCell(t().labels.salesperson, "salesText")];
 
       table.innerHTML = `
         <thead>
@@ -1425,7 +1457,9 @@
               ? `<td>${escapeHtml(item.labels[0])}</td>`
               : state.level === "lane"
                 ? `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td>`
-                : `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td><td>${escapeHtml(item.labels[2])}</td>`;
+                : state.level === "salesperson"
+                  ? `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td><td>${escapeHtml(item.labels[2])}</td>`
+                  : `<td>${escapeHtml(item.labels[0])}</td><td>${escapeHtml(item.labels[1])}</td><td>${escapeHtml(item.labels[2])}</td><td>${escapeHtml(safe(item.salesText))}</td>`;
             const issueCount = item.missing + item.partial;
             return `
               <tr class="data-row" data-parts="${escapeHtml(JSON.stringify(item.parts))}">
@@ -1520,7 +1554,7 @@
       table.innerHTML = `
         <thead>
           <tr>
-            <th>${escapeHtml(t().table.status)}</th><th>${escapeHtml(t().table.bl)}</th><th>${escapeHtml(t().table.bookingShipper)}</th><th>${escapeHtml(t().table.charge)}</th><th>${escapeHtml(t().table.pol)}</th><th>${escapeHtml(t().table.pod)}</th><th>${escapeHtml(t().labels.customer)}</th>
+            <th>${escapeHtml(t().table.status)}</th><th>${escapeHtml(t().table.bl)}</th><th>${escapeHtml(t().table.bookingShipper)}</th><th>${escapeHtml(t().table.salesperson)}</th><th>${escapeHtml(t().table.charge)}</th><th>${escapeHtml(t().table.pol)}</th><th>${escapeHtml(t().table.pod)}</th><th>${escapeHtml(t().labels.customer)}</th>
             <th class="num">20</th><th class="num">40</th><th class="num">${escapeHtml(t().labels.expected)}</th><th class="num">${escapeHtml(t().labels.actual)}</th><th class="num">${escapeHtml(t().labels.gap)}</th><th>${escapeHtml(t().table.tariffCat)}</th>
           </tr>
         </thead>
@@ -1530,6 +1564,7 @@
               <td><span class="pill ${statusClass(row.status)}">${escapeHtml(statusText(row.status))}</span></td>
               <td>${escapeHtml(row.bl)}</td>
               <td>${escapeHtml(safe(row.bookingShipper))}</td>
+              <td>${escapeHtml(salespersonValue(row))}</td>
               <td>${escapeHtml(row.program)}</td>
               <td>${escapeHtml(row.originPort)} (${escapeHtml(row.originCountry)})</td>
               <td>${escapeHtml(row.destinationPort)} (${escapeHtml(row.destinationCountry)})</td>
@@ -1579,6 +1614,7 @@
         if (key === "program") {
           state.origin = "ALL";
           state.destination = "ALL";
+          state.salesperson = "ALL";
           state.selectedOrigin = "";
           state.selectedDestination = "";
         }
@@ -1599,6 +1635,7 @@
     document.getElementById("weekFilter").addEventListener("change", event => { state.week = event.target.value; render(); });
     document.getElementById("pcFilter").addEventListener("change", event => { state.pc = event.target.value; render(); });
     document.getElementById("statusFilter").addEventListener("change", event => { state.status = event.target.value; render(); });
+    document.getElementById("salespersonFilter").addEventListener("change", event => { state.salesperson = event.target.value; render(); });
     document.getElementById("originFilter").addEventListener("change", event => {
       state.origin = event.target.value;
       state.selectedOrigin = "";

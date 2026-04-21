@@ -249,16 +249,17 @@ document.addEventListener('DOMContentLoaded',function(){
   <table>
     <tr><th>필터</th><th>설명</th><th>활용 팁</th></tr>
     <tr><td>Charge</td><td><code>전체</code>, <code>EFC</code>, <code>LSS</code>를 전환합니다.</td><td>LSS CN->JP만 볼 때는 LSS를 선택하면 CN-JP 건만 남습니다.</td></tr>
-    <tr><td>Layer</td><td>Main Table 집계 단계를 <code>선적지</code>, <code>Lane</code>, <code>고객</code>으로 전환합니다.</td><td>행을 클릭하면 선적지 -> Lane -> 고객으로 드릴다운됩니다.</td></tr>
+    <tr><td>Layer</td><td>Main Table 집계 단계를 <code>선적지</code>, <code>Lane</code>, <code>고객</code>, <code>영업사원</code>으로 전환합니다.</td><td>영업사원 레이어는 POL + Booking Shipper code 기준으로 -3W Booking Dashboard의 <code>Salesman_POR</code>를 매핑합니다.</td></tr>
     <tr><td>Origin</td><td>선적지 기준을 <code>POL</code> 또는 <code>국가</code>로 바꿉니다.</td><td>국가 단위 트렌드는 국가, 현장 follow-up은 POL이 편합니다.</td></tr>
     <tr><td>Customer</td><td>고객 집계 기준을 <code>booking shipper</code> 또는 <code>handling consignee</code>로 바꿉니다.</td><td>선적 요청 주체는 Shipper, 정산/수하인 이슈는 CNEE 기준으로 봅니다.</td></tr>
     <tr><td>Month</td><td><code>실적년</code> + <code>실적월</code> 기준 월 필터입니다.</td><td>다운로드 범위가 여러 달이면 특정 월만 분리할 수 있습니다.</td></tr>
     <tr><td>Week</td><td><code>실적년주차</code> 기준 주차 필터입니다.</td><td>금주 16주만 볼 때 <code>W16</code>, 누적은 전체를 선택합니다.</td></tr>
     <tr><td>P/C</td><td><code>p/c</code> 컬럼 기준 필터입니다.</td><td>Prepaid/Collect 성격 차이로 징수 패턴을 비교할 때 사용합니다.</td></tr>
     <tr><td>Status</td><td>정상, 부분징수, 미징수, 초과징수, 수량확인, 수량없음 필터입니다.</td><td>follow-up은 미징수/부분징수/수량확인부터 보는 것이 효율적입니다.</td></tr>
+    <tr><td>영업사원</td><td>-3W Booking Dashboard의 화주별 데이터에서 매핑된 영업사원 필터입니다.</td><td>특정 영업사원의 미징수/부분징수 follow-up 목록을 바로 좁힐 때 사용합니다.</td></tr>
     <tr><td>선적지</td><td>선택된 Origin 기준에 맞춰 국가 또는 POL 목록이 표시됩니다.</td><td>Charge를 먼저 선택하면 해당 Charge의 선적지만 표시됩니다.</td></tr>
     <tr><td>도착지</td><td>POD 기준 목적지 필터입니다.</td><td>EFC 목적지 tariff group과 실제 POD를 함께 확인할 때 사용합니다.</td></tr>
-    <tr><td>Search</td><td>BL, 고객, 국가, POL/POD, route, vessel, voyage, tariff category, status를 통합 검색합니다.</td><td>부분 문자열 검색이므로 BL 일부 또는 고객 코드 일부만 입력해도 됩니다.</td></tr>
+    <tr><td>Search</td><td>BL, 고객, 영업사원, 국가, POL/POD, route, vessel, voyage, tariff category, status를 통합 검색합니다.</td><td>부분 문자열 검색이므로 BL 일부, 고객 코드, 영업사원명 일부만 입력해도 됩니다.</td></tr>
   </table>
   <div class="tip"><strong>필터는 누적 적용됩니다.</strong> 예를 들어 Charge=LSS, Week=W16, Status=미징수, Search=SHA를 동시에 걸면 16주 SHA 관련 LSS 미징수 건만 남습니다.</div>
 </div>
@@ -266,16 +267,17 @@ document.addEventListener('DOMContentLoaded',function(){
   <table>
     <tr><th>Filter</th><th>Description</th><th>Tip</th></tr>
     <tr><td>Charge</td><td>Switches between <code>All</code>, <code>EFC</code>, and <code>LSS</code>.</td><td>Select LSS to isolate China-to-Japan LSS cases.</td></tr>
-    <tr><td>Layer</td><td>Changes the Main Table aggregation level: <code>Origin</code>, <code>Lane</code>, or <code>Customer</code>.</td><td>Click a row to drill from Origin to Lane to Customer.</td></tr>
+    <tr><td>Layer</td><td>Changes the Main Table aggregation level: <code>Origin</code>, <code>Lane</code>, <code>Customer</code>, or <code>Salesperson</code>.</td><td>The salesperson layer maps <code>Salesman_POR</code> from the -3W Booking Dashboard by POL + Booking Shipper code.</td></tr>
     <tr><td>Origin</td><td>Changes origin grouping between <code>POL</code> and <code>Country</code>.</td><td>Use Country for trend review and POL for operational follow-up.</td></tr>
     <tr><td>Customer</td><td>Changes customer grouping between <code>booking shipper</code> and <code>handling consignee</code>.</td><td>Use Shipper for booking ownership and CNEE for consignee/settlement review.</td></tr>
     <tr><td>Month</td><td>Filters by performance year-month.</td><td>Useful when the downloaded range spans multiple months.</td></tr>
     <tr><td>Week</td><td>Filters by performance week.</td><td>Select <code>W16</code> for week 16 only, or All for cumulative view.</td></tr>
     <tr><td>P/C</td><td>Filters by the <code>p/c</code> column.</td><td>Use this to compare prepaid vs collect collection behavior.</td></tr>
     <tr><td>Status</td><td>Filters Normal, Partial, Missing, Over, Quantity Check, and No Quantity statuses.</td><td>For follow-up, start with Missing, Partial, and Quantity Check.</td></tr>
+    <tr><td>Salesperson</td><td>Filters by salesperson mapped from the -3W Booking Dashboard shipper data.</td><td>Use it to isolate missing/partial follow-up for one salesperson.</td></tr>
     <tr><td>Origin Select</td><td>Lists countries or POLs depending on the Origin basis.</td><td>Select Charge first to reduce the origin list to relevant values.</td></tr>
     <tr><td>Destination</td><td>Filters by POD.</td><td>Use with tariff category to verify destination tariff mapping.</td></tr>
-    <tr><td>Search</td><td>Searches BL, customer, country, POL/POD, route, vessel, voyage, tariff category, and status.</td><td>Partial search works, so a BL prefix or customer code fragment is enough.</td></tr>
+    <tr><td>Search</td><td>Searches BL, customer, salesperson, country, POL/POD, route, vessel, voyage, tariff category, and status.</td><td>Partial search works, so a BL prefix, customer code, or salesperson fragment is enough.</td></tr>
   </table>
   <div class="tip"><strong>Filters are cumulative.</strong> For example, Charge=LSS, Week=W16, Status=Missing, and Search=SHA leaves only week-16 SHA-related missing LSS cases.</div>
 </div>
@@ -288,7 +290,8 @@ document.addEventListener('DOMContentLoaded',function(){
     <tr><td>금주 미징수 BL 확인</td><td>Week=<code>W16</code>, Status=<code>미징수</code></td><td>BL Exception에서 음수 Gap 절대값이 큰 순서로 확인합니다.</td></tr>
     <tr><td>CN->JP LSS 누락 확인</td><td>Charge=<code>LSS</code>, Status=<code>미징수</code> 또는 <code>부분징수</code></td><td>LSS actual이 0인지, 수량이 맞는지 확인합니다.</td></tr>
     <tr><td>EFC 목적지별 리스크 확인</td><td>Charge=<code>EFC</code>, Layer=<code>Lane</code>, Sort=<code>Gap</code></td><td>음수 Gap이 큰 목적지/POD부터 원인을 봅니다.</td></tr>
-    <tr><td>고객별 follow-up 리스트 작성</td><td>Layer=<code>고객</code>, Customer=<code>Shipper</code>, Status=<code>부분징수</code>/<code>미징수</code></td><td>동일 고객 반복 여부를 확인합니다.</td></tr>
+    <tr><td>고객별 follow-up 리스트 작성</td><td>Layer=<code>고객</code>, Customer=<code>Shipper</code>, Status=<code>부분징수</code>/<code>미징수</code></td><td>동일 고객 반복 여부와 매핑된 영업사원을 확인합니다.</td></tr>
+    <tr><td>영업사원별 follow-up 정리</td><td>Layer=<code>영업사원</code> 또는 영업사원 필터, Status=<code>미징수</code>/<code>부분징수</code></td><td>담당자별 Gap과 대상 BL을 확인합니다.</td></tr>
     <tr><td>P/C별 징수 패턴 비교</td><td>P/C=<code>P</code> 또는 <code>C</code>, Status=<code>전체</code></td><td>징수율과 미/부분 row 수를 비교합니다.</td></tr>
     <tr><td>특정 BL 또는 화주 확인</td><td>Search에 BL 일부, 고객 코드, route, vessel 입력</td><td>다른 필터가 걸려 있으면 결과가 숨겨질 수 있으니 필요 시 전체로 돌립니다.</td></tr>
   </table>
@@ -299,7 +302,8 @@ document.addEventListener('DOMContentLoaded',function(){
     <tr><td>Find current-week missing BLs</td><td>Week=<code>W16</code>, Status=<code>Missing</code></td><td>Start from the largest negative gaps in BL Exception.</td></tr>
     <tr><td>Check CN->JP LSS gaps</td><td>Charge=<code>LSS</code>, Status=<code>Missing</code> or <code>Partial</code></td><td>Verify whether actual LSS is zero and whether quantities are correct.</td></tr>
     <tr><td>Review EFC destination risk</td><td>Charge=<code>EFC</code>, Layer=<code>Lane</code>, Sort=<code>Gap</code></td><td>Investigate lanes/PODs with the largest negative gaps first.</td></tr>
-    <tr><td>Prepare customer follow-up list</td><td>Layer=<code>Customer</code>, Customer=<code>Shipper</code>, Status=<code>Partial</code>/<code>Missing</code></td><td>Check whether the same customer repeats.</td></tr>
+    <tr><td>Prepare customer follow-up list</td><td>Layer=<code>Customer</code>, Customer=<code>Shipper</code>, Status=<code>Partial</code>/<code>Missing</code></td><td>Check repeated issues and the mapped salesperson for the same customer.</td></tr>
+    <tr><td>Prepare salesperson follow-up</td><td>Layer=<code>Salesperson</code> or Salesperson filter, Status=<code>Missing</code>/<code>Partial</code></td><td>Review gap and target BLs by owner.</td></tr>
     <tr><td>Compare P/C collection behavior</td><td>P/C=<code>P</code> or <code>C</code>, Status=<code>All</code></td><td>Compare collection rate and under-collected row count.</td></tr>
     <tr><td>Find a specific BL or customer</td><td>Type a BL fragment, customer code, route, or vessel in Search</td><td>Reset other filters if the expected row is hidden.</td></tr>
   </table>
@@ -337,7 +341,8 @@ document.addEventListener('DOMContentLoaded',function(){
   <ul>
     <li><strong>선적지 레벨</strong>: 국가 또는 POL 기준으로 전체 Gap과 징수율을 비교합니다.</li>
     <li><strong>Lane 레벨</strong>: 선적지-도착지 조합으로 어느 lane에서 누락이 많은지 확인합니다.</li>
-    <li><strong>고객 레벨</strong>: 특정 lane 안에서 booking shipper 또는 handling consignee별로 follow-up 대상을 확인합니다.</li>
+    <li><strong>고객 레벨</strong>: 특정 lane 안에서 booking shipper 또는 handling consignee별로 follow-up 대상을 확인하며, booking shipper 기준 매핑된 영업사원도 함께 봅니다.</li>
+    <li><strong>영업사원 레벨</strong>: POL + Booking Shipper code로 매핑된 영업사원별 Gap, BL, TEU를 확인합니다.</li>
   </ul>
   <h3>행 클릭</h3>
   <p>선적지 행을 클릭하면 해당 선적지의 lane으로 이동하고, lane 행을 클릭하면 고객 레벨로 이동합니다. Breadcrumb의 <code>전체</code> 또는 선적지 버튼을 누르면 상위 레벨로 돌아갑니다.</p>
@@ -349,7 +354,8 @@ document.addEventListener('DOMContentLoaded',function(){
   <ul>
     <li><strong>Origin level</strong>: compares gap and collection rate by country or POL.</li>
     <li><strong>Lane level</strong>: identifies high-gap origin-destination combinations.</li>
-    <li><strong>Customer level</strong>: shows follow-up targets by booking shipper or handling consignee within a lane.</li>
+    <li><strong>Customer level</strong>: shows follow-up targets by booking shipper or handling consignee within a lane, including the salesperson mapped from booking shipper.</li>
+    <li><strong>Salesperson level</strong>: shows gap, BL count, and TEU by salesperson mapped with POL + Booking Shipper code.</li>
   </ul>
   <h3>Row Click</h3>
   <p>Click an origin row to move to lane level, then click a lane row to move to customer level. Use the breadcrumb buttons to return to a higher level.</p>
@@ -366,7 +372,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <p><code>정상</code>과 <code>수량없음</code>을 제외한 BL 중 Gap 절대값이 큰 순서로 최대 120건을 표시합니다.</p>
   <ul>
     <li><strong>Status</strong>: 원인 분류를 빠르게 볼 수 있는 색상 pill입니다.</li>
-    <li><strong>BL / Booking Shipper / Charge / POL / POD</strong>: ICC 또는 원본 파일에서 대조할 핵심 키입니다. Booking Shipper code는 BL 바로 옆에 표시됩니다.</li>
+    <li><strong>BL / Booking Shipper / 영업사원 / Charge / POL / POD</strong>: ICC 또는 원본 파일에서 대조할 핵심 키입니다. Booking Shipper code와 매핑된 영업사원은 BL 바로 옆에 표시됩니다.</li>
     <li><strong>20 / 40 / Tariff / 징수 / Gap</strong>: 수량과 금액의 불일치 원인을 찾는 기본 컬럼입니다.</li>
     <li><strong>Tariff Cat.</strong>: 적용된 tariff group입니다. 목적지와 group이 맞는지 확인합니다.</li>
   </ul>
@@ -378,7 +384,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <p>Shows up to 120 non-normal BL rows, excluding <code>Normal</code> and <code>No Quantity</code>, sorted by absolute gap.</p>
   <ul>
     <li><strong>Status</strong>: colored pill for quick issue classification.</li>
-    <li><strong>BL / Booking Shipper / Charge / POL / POD</strong>: key fields for ICC/source reconciliation. The booking shipper code is shown next to the BL.</li>
+    <li><strong>BL / Booking Shipper / Salesperson / Charge / POL / POD</strong>: key fields for ICC/source reconciliation. The booking shipper code and mapped salesperson are shown next to the BL.</li>
     <li><strong>20 / 40 / Tariff / Actual / Gap</strong>: primary columns to explain quantity and amount mismatch.</li>
     <li><strong>Tariff Cat.</strong>: applied tariff group. Verify whether it matches the destination.</li>
   </ul>
@@ -456,6 +462,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <ol>
     <li>ICC에서 조건을 입력하고 Excel Down을 실행합니다.</li>
     <li>다운로드 파일을 <code>DynamicList.CSV</code>로 변환/교체합니다.</li>
+    <li>-3W Booking Dashboard의 <code>dist/data.json</code>에서 <code>POL + Booking Shipper code</code> 기준으로 <code>Salesman_POR</code>를 매핑합니다.</li>
     <li><code>build_dashboard.py</code>가 <code>index.html</code>, <code>dashboard.html</code>, <code>data.json</code>을 다시 생성합니다.</li>
     <li>Windows 작업 스케줄러가 매일 오전 8시와 오후 1시에 실행하며, 변경된 <code>index.html</code>/<code>data.json</code>은 GitHub Pages로 배포합니다.</li>
   </ol>
@@ -475,6 +482,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <ol>
     <li>Enter the ICC conditions and run Excel Down.</li>
     <li>Convert/replace the downloaded file as <code>DynamicList.CSV</code>.</li>
+    <li>Map <code>Salesman_POR</code> from the -3W Booking Dashboard <code>dist/data.json</code> by <code>POL + Booking Shipper code</code>.</li>
     <li><code>build_dashboard.py</code> rebuilds <code>index.html</code>, <code>dashboard.html</code>, and <code>data.json</code>.</li>
     <li>Windows Task Scheduler runs the update daily at 08:00 and 13:00, then deploys changed <code>index.html</code>/<code>data.json</code> to GitHub Pages.</li>
   </ol>
