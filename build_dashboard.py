@@ -75,6 +75,7 @@ def status_for(expected: float, actual: float) -> str:
 def read_rows() -> tuple[list[dict], dict]:
     records: list[dict] = []
     skipped_summary = 0
+    skipped_no_freight = 0
     raw_rows = 0
 
     with SOURCE_CSV.open("r", encoding="cp949", newline="") as f:
@@ -88,6 +89,12 @@ def read_rows() -> tuple[list[dict], dict]:
             # DynamicList exports a final total row with blank year/month and very large sums.
             if not year or not month:
                 skipped_summary += 1
+                continue
+
+            of20 = number(row.get("20 o/f"))
+            of40 = number(row.get("40 o/f"))
+            if of20 == 0 and of40 == 0:
+                skipped_no_freight += 1
                 continue
 
             origin_country = clean(row.get("por국가"))
@@ -177,6 +184,7 @@ def read_rows() -> tuple[list[dict], dict]:
         "rawRows": raw_rows,
         "targetRows": len(records),
         "skippedSummaryRows": skipped_summary,
+        "skippedNoFreightRows": skipped_no_freight,
         "programCounts": dict(Counter(r["program"] for r in records)),
         "statusCounts": dict(Counter(r["status"] for r in records)),
     }
@@ -1214,7 +1222,7 @@ HTML = r"""<!doctype html>
       renderMainTable(sourceRows);
       renderChart(sourceRows);
       renderExceptions(sourceRows);
-      document.getElementById("sourceMeta").textContent = `${meta.source} · ${num(meta.targetRows)} target rows · ${num(meta.skippedSummaryRows)} summary row skipped`;
+      document.getElementById("sourceMeta").textContent = `${meta.source} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped`;
     }
 
     document.querySelectorAll("[data-segment] button").forEach(button => {
