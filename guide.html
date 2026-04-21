@@ -285,9 +285,9 @@ document.addEventListener('DOMContentLoaded',function(){
 <div class="card ko">
   <table>
     <tr><th>업무 목적</th><th>권장 필터 조합</th><th>확인 포인트</th></tr>
-    <tr><td>금주 미징수 BL 확인</td><td>Week=<code>W16</code>, Status=<code>미징수</code></td><td>BL Exception에서 Gap 큰 순서로 확인합니다.</td></tr>
+    <tr><td>금주 미징수 BL 확인</td><td>Week=<code>W16</code>, Status=<code>미징수</code></td><td>BL Exception에서 음수 Gap 절대값이 큰 순서로 확인합니다.</td></tr>
     <tr><td>CN->JP LSS 누락 확인</td><td>Charge=<code>LSS</code>, Status=<code>미징수</code> 또는 <code>부분징수</code></td><td>LSS actual이 0인지, 수량이 맞는지 확인합니다.</td></tr>
-    <tr><td>EFC 목적지별 리스크 확인</td><td>Charge=<code>EFC</code>, Layer=<code>Lane</code>, Sort=<code>Gap</code></td><td>Gap이 큰 목적지/POD부터 원인을 봅니다.</td></tr>
+    <tr><td>EFC 목적지별 리스크 확인</td><td>Charge=<code>EFC</code>, Layer=<code>Lane</code>, Sort=<code>Gap</code></td><td>음수 Gap이 큰 목적지/POD부터 원인을 봅니다.</td></tr>
     <tr><td>고객별 follow-up 리스트 작성</td><td>Layer=<code>고객</code>, Customer=<code>Shipper</code>, Status=<code>부분징수</code>/<code>미징수</code></td><td>동일 고객 반복 여부를 확인합니다.</td></tr>
     <tr><td>P/C별 징수 패턴 비교</td><td>P/C=<code>P</code> 또는 <code>C</code>, Status=<code>전체</code></td><td>징수율과 미/부분 row 수를 비교합니다.</td></tr>
     <tr><td>특정 BL 또는 화주 확인</td><td>Search에 BL 일부, 고객 코드, route, vessel 입력</td><td>다른 필터가 걸려 있으면 결과가 숨겨질 수 있으니 필요 시 전체로 돌립니다.</td></tr>
@@ -296,9 +296,9 @@ document.addEventListener('DOMContentLoaded',function(){
 <div class="card en" style="display:none">
   <table>
     <tr><th>Purpose</th><th>Recommended Filters</th><th>What to Check</th></tr>
-    <tr><td>Find current-week missing BLs</td><td>Week=<code>W16</code>, Status=<code>Missing</code></td><td>Start from the largest gaps in BL Exception.</td></tr>
+    <tr><td>Find current-week missing BLs</td><td>Week=<code>W16</code>, Status=<code>Missing</code></td><td>Start from the largest negative gaps in BL Exception.</td></tr>
     <tr><td>Check CN->JP LSS gaps</td><td>Charge=<code>LSS</code>, Status=<code>Missing</code> or <code>Partial</code></td><td>Verify whether actual LSS is zero and whether quantities are correct.</td></tr>
-    <tr><td>Review EFC destination risk</td><td>Charge=<code>EFC</code>, Layer=<code>Lane</code>, Sort=<code>Gap</code></td><td>Investigate high-gap lanes/PODs first.</td></tr>
+    <tr><td>Review EFC destination risk</td><td>Charge=<code>EFC</code>, Layer=<code>Lane</code>, Sort=<code>Gap</code></td><td>Investigate lanes/PODs with the largest negative gaps first.</td></tr>
     <tr><td>Prepare customer follow-up list</td><td>Layer=<code>Customer</code>, Customer=<code>Shipper</code>, Status=<code>Partial</code>/<code>Missing</code></td><td>Check whether the same customer repeats.</td></tr>
     <tr><td>Compare P/C collection behavior</td><td>P/C=<code>P</code> or <code>C</code>, Status=<code>All</code></td><td>Compare collection rate and under-collected row count.</td></tr>
     <tr><td>Find a specific BL or customer</td><td>Type a BL fragment, customer code, route, or vessel in Search</td><td>Reset other filters if the expected row is hidden.</td></tr>
@@ -313,7 +313,7 @@ document.addEventListener('DOMContentLoaded',function(){
     <tr><td>징수율</td><td>Tariff 기대액 대비 실제 징수액 비율</td><td><code>실제 징수액 / Tariff 기대액</code>. 95~105%는 정상 범위로 판단합니다.</td></tr>
     <tr><td>Tariff 기대액</td><td>타리프 기준으로 받아야 할 금액</td><td><code>20갯수 * 20DRY tariff + 40갯수 * 40DRY tariff</code></td></tr>
     <tr><td>실제 징수액</td><td>원본에 입력된 실제 EFC 또는 LSS 합계</td><td>EFC는 <code>20 efc + 40 efc</code>, LSS는 <code>20 lss + 40 lss</code></td></tr>
-    <tr><td>Gap</td><td>기대액과 실제액 차이</td><td><code>Tariff 기대액 - 실제 징수액</code>. 양수는 부족, 음수는 초과징수입니다.</td></tr>
+    <tr><td>Gap</td><td>실제액과 기대액 차이</td><td><code>실제 징수액 - Tariff 기대액</code>. 음수는 부족(shortfall), 양수는 초과징수입니다.</td></tr>
     <tr><td>대상 BL</td><td>필터 후 남은 고유 BL 수</td><td>같은 BL이 여러 row로 나뉘어도 BL 수는 중복 제거됩니다.</td></tr>
     <tr><td>TEU</td><td>필터 후 대상 TEU 합계</td><td>원본 <code>전체 teu</code> 합계입니다.</td></tr>
   </table>
@@ -324,7 +324,7 @@ document.addEventListener('DOMContentLoaded',function(){
     <tr><td>Collection Rate</td><td>Actual collection vs tariff expectation</td><td><code>Actual / Expected</code>. 95-105% is treated as normal.</td></tr>
     <tr><td>Tariff Expected</td><td>Amount expected by tariff</td><td><code>20 qty * 20DRY tariff + 40 qty * 40DRY tariff</code></td></tr>
     <tr><td>Actual Collection</td><td>Actual EFC or LSS amount from the source</td><td>EFC: <code>20 efc + 40 efc</code>, LSS: <code>20 lss + 40 lss</code></td></tr>
-    <tr><td>Gap</td><td>Difference between expected and actual</td><td><code>Expected - Actual</code>. Positive means shortfall; negative means over-collected.</td></tr>
+    <tr><td>Gap</td><td>Difference between actual and expected</td><td><code>Actual - Expected</code>. Negative means shortfall; positive means over-collected.</td></tr>
     <tr><td>Target BL</td><td>Unique BL count after filtering</td><td>Duplicate BL rows are counted once.</td></tr>
     <tr><td>TEU</td><td>Total TEU after filtering</td><td>Sum of source <code>전체 teu</code>.</td></tr>
   </table>
@@ -361,7 +361,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <h2 class="ko">Top Gap 차트 / BL Exception</h2><h2 class="en" style="display:none">Top Gap Chart / BL Exceptions</h2>
 <div class="card ko">
   <h3>Top Gap</h3>
-  <p>현재 필터와 Layer 기준으로 상위 12개 항목을 보여줍니다. 막대는 선택한 Sort 기준의 상대 크기이며, 진한 녹색 막대는 기대액 대비 실제 징수액의 상대 수준을 나타냅니다.</p>
+  <p>현재 필터와 Layer 기준으로 상위 12개 항목을 보여줍니다. Gap 선택 시에는 가장 큰 부족분, 즉 가장 음수인 Gap부터 표시합니다. 막대는 선택한 Sort 기준의 상대 크기이며, 진한 녹색 막대는 기대액 대비 실제 징수액의 상대 수준을 나타냅니다.</p>
   <h3>BL Exception</h3>
   <p><code>정상</code>과 <code>수량없음</code>을 제외한 BL 중 Gap 절대값이 큰 순서로 최대 120건을 표시합니다.</p>
   <ul>
@@ -373,7 +373,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </div>
 <div class="card en" style="display:none">
   <h3>Top Gap</h3>
-  <p>Shows the top 12 items based on the current filters and Layer. The bar length represents the selected Sort metric, and the dark green segment indicates actual collection relative to expected amount.</p>
+  <p>Shows the top 12 items based on the current filters and Layer. When Gap is selected, the chart starts from the largest shortfall, meaning the most negative gap. The bar length represents the selected Sort metric, and the dark green segment indicates actual collection relative to expected amount.</p>
   <h3>BL Exception</h3>
   <p>Shows up to 120 non-normal BL rows, excluding <code>Normal</code> and <code>No Quantity</code>, sorted by absolute gap.</p>
   <ul>

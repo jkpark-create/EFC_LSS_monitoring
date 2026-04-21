@@ -891,7 +891,7 @@
       search: "",
       selectedOrigin: "",
       selectedDestination: "",
-      tableSort: { key: "gap", direction: "desc" },
+      tableSort: { key: "gap", direction: "asc" },
     };
 
     function t() {
@@ -899,7 +899,9 @@
     }
 
     function usd(value) {
-      return "$" + Math.round(value || 0).toLocaleString("en-US");
+      const rounded = Math.round(value || 0);
+      const sign = rounded < 0 ? "-" : "";
+      return sign + "$" + Math.abs(rounded).toLocaleString("en-US");
     }
 
     function num(value) {
@@ -1321,7 +1323,7 @@
       document.getElementById("kpiActual").textContent = usd(total.actual);
       document.getElementById("kpiActualDelta").textContent = t().kpis.overCheck(total.over, total.check);
       document.getElementById("kpiGap").textContent = usd(total.gap);
-      document.getElementById("kpiGapDelta").textContent = total.gap >= 0 ? t().kpis.shortfall : t().kpis.overCollected;
+      document.getElementById("kpiGapDelta").textContent = total.gap < 0 ? t().kpis.shortfall : t().kpis.overCollected;
       document.getElementById("kpiBl").textContent = num(total.bl);
       document.getElementById("kpiBlDelta").textContent = t().kpis.rows(sourceRows.length);
       document.getElementById("kpiTeu").textContent = num(total.teu);
@@ -1470,6 +1472,7 @@
         .sort((a, b) => {
           const av = Number.isFinite(a[state.sortMetric]) ? a[state.sortMetric] : -Infinity;
           const bv = Number.isFinite(b[state.sortMetric]) ? b[state.sortMetric] : -Infinity;
+          if (state.sortMetric === "gap") return av - bv;
           return bv - av;
         })
         .slice(0, 12);
@@ -1577,6 +1580,9 @@
           state.selectedDestination = "";
         }
         state.tableSort.key = state.sortMetric;
+        if (key === "sortMetric") {
+          state.tableSort.direction = state.sortMetric === "gap" ? "asc" : "desc";
+        }
         syncSegments();
         render();
       });

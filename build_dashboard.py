@@ -163,7 +163,7 @@ def read_rows() -> tuple[list[dict], dict]:
             booking_shipper = clean(row.get("booking shipper"))
             handling_consignee = clean(row.get("handling consignee"))
             status = status_for(expected, actual)
-            gap = expected - actual
+            gap = actual - expected
 
             records.append(
                 {
@@ -1106,7 +1106,7 @@ HTML = r"""<!doctype html>
       search: "",
       selectedOrigin: "",
       selectedDestination: "",
-      tableSort: { key: "gap", direction: "desc" },
+      tableSort: { key: "gap", direction: "asc" },
     };
 
     function t() {
@@ -1114,7 +1114,9 @@ HTML = r"""<!doctype html>
     }
 
     function usd(value) {
-      return "$" + Math.round(value || 0).toLocaleString("en-US");
+      const rounded = Math.round(value || 0);
+      const sign = rounded < 0 ? "-" : "";
+      return sign + "$" + Math.abs(rounded).toLocaleString("en-US");
     }
 
     function num(value) {
@@ -1536,7 +1538,7 @@ HTML = r"""<!doctype html>
       document.getElementById("kpiActual").textContent = usd(total.actual);
       document.getElementById("kpiActualDelta").textContent = t().kpis.overCheck(total.over, total.check);
       document.getElementById("kpiGap").textContent = usd(total.gap);
-      document.getElementById("kpiGapDelta").textContent = total.gap >= 0 ? t().kpis.shortfall : t().kpis.overCollected;
+      document.getElementById("kpiGapDelta").textContent = total.gap < 0 ? t().kpis.shortfall : t().kpis.overCollected;
       document.getElementById("kpiBl").textContent = num(total.bl);
       document.getElementById("kpiBlDelta").textContent = t().kpis.rows(sourceRows.length);
       document.getElementById("kpiTeu").textContent = num(total.teu);
@@ -1685,6 +1687,7 @@ HTML = r"""<!doctype html>
         .sort((a, b) => {
           const av = Number.isFinite(a[state.sortMetric]) ? a[state.sortMetric] : -Infinity;
           const bv = Number.isFinite(b[state.sortMetric]) ? b[state.sortMetric] : -Infinity;
+          if (state.sortMetric === "gap") return av - bv;
           return bv - av;
         })
         .slice(0, 12);
@@ -1792,6 +1795,9 @@ HTML = r"""<!doctype html>
           state.selectedDestination = "";
         }
         state.tableSort.key = state.sortMetric;
+        if (key === "sortMetric") {
+          state.tableSort.direction = state.sortMetric === "gap" ? "asc" : "desc";
+        }
         syncSegments();
         render();
       });
