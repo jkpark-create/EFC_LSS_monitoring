@@ -75,7 +75,7 @@ li{margin:4px 0}
     <li><a href="#filter-cases" data-id="filter-cases">필터 활용 예시</a></li>
     <li><a href="#kpis" data-id="kpis">KPI 해석</a></li>
     <li><a href="#drilldown" data-id="drilldown">테이블/드릴다운</a></li>
-    <li><a href="#exceptions" data-id="exceptions">차트/예외 BL</a></li>
+    <li><a href="#exceptions" data-id="exceptions">영업사원 현황/예외 BL</a></li>
     <li><a href="#status" data-id="status">상태 기준</a></li>
     <li><a href="#tariff" data-id="tariff">Tariff 기준</a></li>
     <li><a href="#data-update" data-id="data-update">데이터 갱신</a></li>
@@ -90,7 +90,7 @@ li{margin:4px 0}
     <li><a href="#filter-cases" data-id="filter-cases">Filter Use Cases</a></li>
     <li><a href="#kpis" data-id="kpis">KPI Reading</a></li>
     <li><a href="#drilldown" data-id="drilldown">Tables/Drilldown</a></li>
-    <li><a href="#exceptions" data-id="exceptions">Charts/Exceptions</a></li>
+    <li><a href="#exceptions" data-id="exceptions">Sales Status/Exceptions</a></li>
     <li><a href="#status" data-id="status">Status Rules</a></li>
     <li><a href="#tariff" data-id="tariff">Tariff Basis</a></li>
     <li><a href="#data-update" data-id="data-update">Data Updates</a></li>
@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <li><a href="#filter-cases">필터 활용 예시</a></li>
   <li><a href="#kpis">KPI 해석</a></li>
   <li><a href="#drilldown">테이블/드릴다운</a></li>
-  <li><a href="#exceptions">Top Gap 차트 / BL Exception</a></li>
+  <li><a href="#exceptions">영업사원별 현황 / BL Exception</a></li>
   <li><a href="#status">상태 기준</a></li>
   <li><a href="#tariff">Tariff 기준</a></li>
   <li><a href="#data-update">ICC 데이터 갱신</a></li>
@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <li><a href="#filter-cases">Filter Use Cases</a></li>
   <li><a href="#kpis">KPI Reading</a></li>
   <li><a href="#drilldown">Tables and Drilldown</a></li>
-  <li><a href="#exceptions">Top Gap Chart / BL Exceptions</a></li>
+  <li><a href="#exceptions">Salesperson Status / BL Exceptions</a></li>
   <li><a href="#status">Status Rules</a></li>
   <li><a href="#tariff">Tariff Basis</a></li>
   <li><a href="#data-update">ICC Data Updates</a></li>
@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded',function(){
   <h3>행 클릭</h3>
   <p>선적지 행을 클릭하면 해당 선적지의 lane으로 이동하고, lane 행을 클릭하면 고객 레벨로 이동합니다. Breadcrumb의 <code>전체</code> 또는 선적지 버튼을 누르면 상위 레벨로 돌아갑니다.</p>
   <h3>정렬</h3>
-  <p>컬럼 헤더를 클릭하면 해당 컬럼 기준으로 오름차순/내림차순 정렬됩니다. 상단 Sort 버튼의 <code>Gap</code>, <code>Tariff</code>, <code>징수율</code>은 Top Gap 차트 정렬 기준에도 영향을 줍니다.</p>
+  <p>컬럼 헤더를 클릭하면 해당 컬럼 기준으로 오름차순/내림차순 정렬됩니다. 상단 Sort 버튼의 <code>Gap</code>, <code>Tariff</code>, <code>징수율</code>은 Main Table 정렬 기준을 빠르게 바꿀 때 사용합니다.</p>
 </div>
 <div class="card en" style="display:none">
   <h3>Main Table</h3>
@@ -360,14 +360,18 @@ document.addEventListener('DOMContentLoaded',function(){
   <h3>Row Click</h3>
   <p>Click an origin row to move to lane level, then click a lane row to move to customer level. Use the breadcrumb buttons to return to a higher level.</p>
   <h3>Sorting</h3>
-  <p>Click table headers to sort ascending/descending. The top Sort buttons, <code>Gap</code>, <code>Tariff</code>, and <code>Collection Rate</code>, also control the Top Gap chart ranking.</p>
+  <p>Click table headers to sort ascending/descending. The top Sort buttons, <code>Gap</code>, <code>Tariff</code>, and <code>Collection Rate</code>, quickly change the Main Table sort metric.</p>
 </div>
 
 <span class="anchor" id="exceptions"></span>
-<h2 class="ko">Top Gap 차트 / BL Exception</h2><h2 class="en" style="display:none">Top Gap Chart / BL Exceptions</h2>
+<h2 class="ko">영업사원별 현황 / BL Exception</h2><h2 class="en" style="display:none">Salesperson Status / BL Exceptions</h2>
 <div class="card ko">
-  <h3>Top Gap</h3>
-  <p>현재 필터와 Layer 기준으로 상위 12개 항목을 보여줍니다. Gap 선택 시에는 가장 큰 부족분, 즉 가장 음수인 Gap부터 표시합니다. 막대는 선택한 Sort 기준의 상대 크기이며, 진한 녹색 막대는 기대액 대비 실제 징수액의 상대 수준을 나타냅니다.</p>
+  <h3>영업사원별 현황</h3>
+  <p>기존 Top Gap 위치에는 현재 필터 기준의 영업사원별 징수 현황을 표시합니다. 상단 요약은 매핑된 row 수, 담당자 수, 미징수/부분징수 부족분을 보여주고, 표는 미징수/부분징수 Gap이 큰 담당자부터 최대 12명을 정렬합니다.</p>
+  <ul>
+    <li><strong>영업사원</strong>: -3W Booking Dashboard에서 POL + Booking Shipper code 기준으로 매핑된 <code>Salesman_POR</code>입니다.</li>
+    <li><strong>BL / 미·부분 / Gap / 징수율</strong>: 담당자별 follow-up 우선순위를 잡는 핵심 지표입니다.</li>
+  </ul>
   <h3>BL Exception</h3>
   <p><code>정상</code>과 <code>수량없음</code>을 제외한 BL 중 Gap 절대값이 큰 순서로 최대 120건을 표시합니다.</p>
   <ul>
@@ -378,8 +382,12 @@ document.addEventListener('DOMContentLoaded',function(){
   </ul>
 </div>
 <div class="card en" style="display:none">
-  <h3>Top Gap</h3>
-  <p>Shows the top 12 items based on the current filters and Layer. When Gap is selected, the chart starts from the largest shortfall, meaning the most negative gap. The bar length represents the selected Sort metric, and the dark green segment indicates actual collection relative to expected amount.</p>
+  <h3>Salesperson Status</h3>
+  <p>The former Top Gap area now shows salesperson-level collection status for the current filters. The summary shows mapped rows, owner count, and missing/partial shortfall; the table ranks up to 12 salespeople by the largest missing/partial negative gap.</p>
+  <ul>
+    <li><strong>Salesperson</strong>: <code>Salesman_POR</code> mapped from the -3W Booking Dashboard by POL + Booking Shipper code.</li>
+    <li><strong>BL / Missing-Partial / Gap / Rate</strong>: key metrics for assigning follow-up priority by owner.</li>
+  </ul>
   <h3>BL Exception</h3>
   <p>Shows up to 120 non-normal BL rows, excluding <code>Normal</code> and <code>No Quantity</code>, sorted by absolute gap.</p>
   <ul>

@@ -446,6 +446,96 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .sales-status {
+      padding: 10px 12px 14px;
+      min-height: 333px;
+    }
+
+    .sales-status-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .sales-status-summary div {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px;
+      background: #fbfcfb;
+      min-width: 0;
+    }
+
+    .sales-status-summary span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .sales-status-summary strong {
+      display: block;
+      margin-top: 3px;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sales-status-table {
+      min-width: 0;
+      font-size: 12px;
+    }
+
+    .sales-status-table th,
+    .sales-status-table td {
+      padding: 7px 6px;
+      height: 32px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+
+    .sales-status-table th {
+      font-size: 10px;
+    }
+
+    .sales-status-table .sales-name {
+      max-width: 92px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 800;
+    }
+
+    .sales-gap-cell {
+      min-width: 92px;
+    }
+
+    .sales-gap-text {
+      display: flex;
+      justify-content: flex-end;
+      font-variant-numeric: tabular-nums;
+      font-weight: 760;
+      margin-bottom: 3px;
+    }
+
+    .sales-gap-bar {
+      height: 5px;
+      border-radius: 999px;
+      background: #edf1ee;
+      overflow: hidden;
+    }
+
+    .sales-gap-bar span {
+      display: block;
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--red), var(--yellow));
+    }
+
     .table-wrap {
       overflow: auto;
       max-height: 560px;
@@ -707,9 +797,9 @@
 
       <div class="panel">
         <div class="panel-head">
-          <div class="panel-title">Top Gap</div>
+          <div class="panel-title" id="salesStatusTitle">영업사원별 현황</div>
         </div>
-        <div class="chart" id="gapChart"></div>
+        <div class="sales-status" id="salesStatus"></div>
       </div>
       </section>
 
@@ -782,6 +872,7 @@
         domainDenied: domain => `${domain || "Unknown"} 도메인은 접근할 수 없습니다.`,
         lssBasis: "CN→JP LSS USD 150/300",
         efcBasis: "EFC DRY tariff basis",
+        salesStatusTitle: "영업사원별 현황",
         sourceMeta: meta => {
           const sales = meta.salesMapping && meta.salesMapping.found
             ? ` · 영업사원 ${num(meta.salesMapping.matchedRows)} rows 매핑`
@@ -814,6 +905,8 @@
           titleSuffix: "별 징수율", noData: "데이터 없음", noException: "예외 없음",
           bl: "BL", teu: "TEU", issue: "미/부분", category: "구분", status: "Status",
           bookingShipper: "Booking Shipper", salesperson: "영업사원", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+          salespersonStatus: "영업사원", underCollected: "미/부분",
+          mappedRows: "매핑 rows", owners: "담당자", shortfall: "부족",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "구분",
@@ -843,6 +936,7 @@
         domainDenied: domain => `${domain || "Unknown"} domain is not allowed.`,
         lssBasis: "CN→JP LSS USD 150/300",
         efcBasis: "EFC DRY tariff basis",
+        salesStatusTitle: "Salesperson Status",
         sourceMeta: meta => {
           const sales = meta.salesMapping && meta.salesMapping.found
             ? ` · ${num(meta.salesMapping.matchedRows)} rows sales-mapped`
@@ -875,6 +969,8 @@
           titleSuffix: " Collection Rate", noData: "No data", noException: "No exception",
           bl: "BL", teu: "TEU", issue: "Missing/Partial", category: "Category", status: "Status",
           bookingShipper: "Booking Shipper", salesperson: "Salesperson", charge: "Charge", pol: "POL", pod: "POD", tariffCat: "Tariff Cat.",
+          salespersonStatus: "Salesperson", underCollected: "Miss/Part",
+          mappedRows: "Mapped rows", owners: "Owners", shortfall: "Shortfall",
         },
         tariffBasis: "Tariff Basis",
         tariffCategory: "Category",
@@ -1022,6 +1118,7 @@
             expected: 0,
             actual: 0,
             gap: 0,
+            issueGap: 0,
             missing: 0,
             partial: 0,
             over: 0,
@@ -1040,6 +1137,7 @@
         item.expected += Number(row.expected || 0);
         item.actual += Number(row.actual || 0);
         item.gap += Number(row.gap || 0);
+        if (["미징수", "부분징수"].includes(row.status)) item.issueGap += Number(row.gap || 0);
         if (row.status === "미징수") item.missing += 1;
         if (row.status === "부분징수") item.partial += 1;
         if (row.status === "초과징수") item.over += 1;
@@ -1155,6 +1253,7 @@
       setText("dashboardTitle", ui.dashboardTitle);
       setText("lssBasisText", ui.lssBasis);
       setText("efcBasisText", ui.efcBasis);
+      setText("salesStatusTitle", ui.salesStatusTitle);
       setText("tariffBasisTitle", ui.tariffBasis);
       setText("tariffCategoryHead", ui.tariffCategory);
       setText("tariffNote", ui.tariffNote);
@@ -1481,7 +1580,7 @@
       table.querySelectorAll("th[data-sort]").forEach(th => {
         th.addEventListener("click", () => {
           const key = th.dataset.sort;
-          const map = { name: "sortLabel", origin: "sortLabel", destination: "sortLabel", customer: "sortLabel" };
+          const map = { name: "sortLabel", origin: "sortLabel", destination: "sortLabel", customer: "sortLabel", salesperson: "sortLabel" };
           state.tableSort.key = map[key] || key;
           state.tableSort.direction = state.tableSort.direction === "desc" ? "asc" : "desc";
           render();
@@ -1506,39 +1605,70 @@
       });
     }
 
-    function renderChart(sourceRows) {
-      const groupers = currentGroupers();
+    function renderSalesStatus(sourceRows) {
+      const panel = document.getElementById("salesStatus");
+      const groupers = [{
+        value: row => salespersonValue(row),
+        label: row => salespersonValue(row),
+      }];
       const items = aggregate(sourceRows, groupers)
         .sort((a, b) => {
-          const av = Number.isFinite(a[state.sortMetric]) ? a[state.sortMetric] : -Infinity;
-          const bv = Number.isFinite(b[state.sortMetric]) ? b[state.sortMetric] : -Infinity;
-          if (state.sortMetric === "gap") return av - bv;
-          return bv - av;
+          const aShortfall = Math.min(a.issueGap, 0);
+          const bShortfall = Math.min(b.issueGap, 0);
+          if (aShortfall !== bShortfall) return aShortfall - bShortfall;
+          return (b.missing + b.partial) - (a.missing + a.partial);
         })
         .slice(0, 12);
-      const chart = document.getElementById("gapChart");
+
       if (!items.length) {
-        chart.innerHTML = `<div class="empty">${escapeHtml(t().table.noData)}</div>`;
+        panel.innerHTML = `<div class="empty">${escapeHtml(t().table.noData)}</div>`;
         return;
       }
-      const max = Math.max(...items.map(item => Math.abs(item[state.sortMetric]) || 0), 1);
-      chart.innerHTML = items.map(item => {
-        const value = Number.isFinite(item[state.sortMetric]) ? item[state.sortMetric] : 0;
-        const gapWidth = Math.min(100, Math.abs(value) / max * 100);
-        const actualWidth = item.expected > 0 ? Math.min(100, item.actual / item.expected * 100) : 0;
-        const label = item.labels[item.labels.length - 1];
-        const metricValue = state.sortMetric === "rate" ? pct(value) : state.sortMetric === "gap" ? signedUsd(value) : usd(value);
-        return `
-          <div class="bar-row" title="${escapeHtml(item.labels.join(" > "))}">
-            <div class="bar-label">${escapeHtml(label)}</div>
-            <div class="bar-track">
-              <div class="bar-fill" style="width:${gapWidth}%"></div>
-              <div class="bar-actual" style="width:${actualWidth}%"></div>
-            </div>
-            <div class="bar-value">${metricValue}</div>
-          </div>
-        `;
-      }).join("");
+
+      const mappedRows = sourceRows.filter(row => row.salesperson).length;
+      const ownerCount = new Set(sourceRows.map(row => row.salesperson).filter(Boolean)).size;
+      const shortfall = sourceRows.reduce((sum, row) => {
+        return ["미징수", "부분징수"].includes(row.status) ? sum + Math.min(Number(row.gap || 0), 0) : sum;
+      }, 0);
+      const maxShortfall = Math.max(...items.map(item => Math.abs(Math.min(item.issueGap, 0))), 1);
+
+      panel.innerHTML = `
+        <div class="sales-status-summary">
+          <div><span>${escapeHtml(t().table.mappedRows)}</span><strong>${num(mappedRows)}</strong></div>
+          <div><span>${escapeHtml(t().table.owners)}</span><strong>${num(ownerCount)}</strong></div>
+          <div><span>${escapeHtml(t().table.shortfall)}</span><strong>${signedUsd(shortfall)}</strong></div>
+        </div>
+        <table class="sales-status-table">
+          <thead>
+            <tr>
+              <th>${escapeHtml(t().table.salespersonStatus)}</th>
+              <th class="num">${escapeHtml(t().table.bl)}</th>
+              <th class="num">${escapeHtml(t().table.underCollected)}</th>
+              <th class="num">${escapeHtml(t().labels.gap)}</th>
+              <th class="num">${escapeHtml(t().labels.rate)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(item => {
+              const issueCount = item.missing + item.partial;
+              const issueGap = Math.min(item.issueGap, 0);
+              const shortfallWidth = Math.min(100, Math.abs(issueGap) / maxShortfall * 100);
+              return `
+                <tr>
+                  <td class="sales-name" title="${escapeHtml(item.labels[0])}">${escapeHtml(item.labels[0])}</td>
+                  <td class="num">${num(item.bl)}</td>
+                  <td class="num">${num(issueCount)}</td>
+                  <td class="num sales-gap-cell">
+                    <div class="sales-gap-text">${signedUsd(issueGap)}</div>
+                    <div class="sales-gap-bar"><span style="width:${shortfallWidth}%"></span></div>
+                  </td>
+                  <td class="num">${pct(item.rate)}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      `;
     }
 
     function renderExceptions(sourceRows) {
@@ -1596,7 +1726,7 @@
       renderKpis(sourceRows);
       renderBreadcrumb();
       renderMainTable(sourceRows);
-      renderChart(sourceRows);
+      renderSalesStatus(sourceRows);
       renderExceptions(sourceRows);
       document.getElementById("sourceMeta").textContent = t().sourceMeta(meta);
     }
