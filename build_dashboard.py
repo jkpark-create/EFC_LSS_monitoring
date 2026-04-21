@@ -749,6 +749,7 @@ HTML = r"""<!doctype html>
     .sales-status {
       padding: 10px 12px 14px;
       min-height: 333px;
+      max-height: 560px;
       overflow: auto;
     }
 
@@ -1936,8 +1937,7 @@ HTML = r"""<!doctype html>
           const bShortfall = Math.min(b.gap, 0);
           if (aShortfall !== bShortfall) return aShortfall - bShortfall;
           return b.issueShippers - a.issueShippers;
-        })
-        .slice(0, 12);
+        });
 
       if (!items.length) {
         panel.innerHTML = `<div class="empty">${escapeHtml(t().table.noData)}</div>`;

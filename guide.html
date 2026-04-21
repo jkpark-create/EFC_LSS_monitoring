@@ -367,7 +367,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <h2 class="ko">영업사원별 현황 / BL Exception</h2><h2 class="en" style="display:none">Salesperson Status / BL Exceptions</h2>
 <div class="card ko">
   <h3>영업사원별 현황</h3>
-  <p>기존 Top Gap 위치에는 현재 필터 기준의 영업사원별 징수 현황을 표시합니다. 상단 요약은 매핑된 업체수, 담당자 수, 전체 Gap을 보여주고, 표는 Gap이 큰 shortfall 담당자부터 최대 12명을 정렬합니다.</p>
+  <p>기존 Top Gap 위치에는 현재 필터 기준의 영업사원별 징수 현황을 표시합니다. 상단 요약은 매핑된 업체수, 담당자 수, 전체 Gap을 보여주고, 표는 Gap이 큰 shortfall 담당자부터 모든 영업사원을 정렬해 표시합니다.</p>
   <ul>
     <li><strong>영업사원</strong>: -3W Booking Dashboard에서 POL + Booking Shipper code 기준으로 매핑된 <code>Salesman_POR</code>입니다.</li>
     <li><strong>업체수</strong>: 고유 <code>Booking Shipper code</code> 기준 업체 수입니다.</li>
@@ -386,7 +386,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </div>
 <div class="card en" style="display:none">
   <h3>Salesperson Status</h3>
-  <p>The former Top Gap area now shows salesperson-level collection status for the current filters. The summary shows mapped shipper count, owner count, and total gap; the table ranks up to 12 salespeople by the largest shortfall gap.</p>
+  <p>The former Top Gap area now shows salesperson-level collection status for the current filters. The summary shows mapped shipper count, owner count, and total gap; the table ranks all salespeople by the largest shortfall gap.</p>
   <ul>
     <li><strong>Salesperson</strong>: <code>Salesman_POR</code> mapped from the -3W Booking Dashboard by POL + Booking Shipper code.</li>
     <li><strong>Shippers</strong>: unique <code>Booking Shipper code</code> count.</li>
