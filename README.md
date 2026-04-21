@@ -14,6 +14,7 @@ GitHub Pages 배포 URL에서 `index.html` 또는 `dashboard.html`을 열면 됩
 - 승인된 리디렉션 URI: `https://jkpark-create.github.io/EFC_LSS_monitoring/`
 - 허용 도메인: `ekmtc.com`
 - OAuth Client ID를 교체해야 하면 `build_dashboard.py`의 `GOOGLE_CLIENT_ID` 값을 수정한 뒤 대시보드를 다시 생성합니다.
+- 앱은 Google OAuth에 항상 `https://jkpark-create.github.io/EFC_LSS_monitoring/`를 `redirect_uri`로 전달합니다.
 
 CSV가 갱신되면 아래 명령으로 대시보드를 다시 생성합니다.
 

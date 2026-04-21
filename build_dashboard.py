@@ -948,6 +948,7 @@ HTML = r"""<!doctype html>
   <script>
     const DATA_URL = "data.json";
     const GOOGLE_CLIENT_ID = "409330651463-giie223egsskdq10etn642gjtron1hq5.apps.googleusercontent.com";
+    const REDIRECT_PATH = "/EFC_LSS_monitoring/";
     const ALLOWED_DOMAINS = ["ekmtc.com"];
     const SCOPES = "email profile openid";
     let rows = [];
@@ -1177,11 +1178,7 @@ HTML = r"""<!doctype html>
     }
 
     function authRedirectUri() {
-      const url = new URL(location.href);
-      url.hash = "";
-      url.search = "";
-      url.pathname = url.pathname.replace(/[^/]*$/, "");
-      return url.toString();
+      return location.origin + REDIRECT_PATH;
     }
 
     function doLogin() {
