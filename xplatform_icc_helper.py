@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import getpass
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,8 @@ DEFAULT_LOG_DIR = Path("logs")
 DEFAULT_DOCUMENT_NAME = "[\uc601\uc5c5\ud300] LSS & EFC \uc9d5\uc218\uae08\uc561\uc870\ud68c"
 DEFAULT_DOWNLOAD_DIR = Path("downloads")
 BASE_WINDOW_SIZE = (1280, 728)
+LOGIN_WINDOW_SIZE = (648, 368)
+CREDENTIAL_TARGET = "EFC_LSS_ICC_XPLATFORM"
 
 
 @dataclass(frozen=True)
@@ -231,12 +234,132 @@ def login_window(windows: list[WindowInfo] | None = None) -> WindowInfo | None:
     return max(candidates, key=visible_area)
 
 
+def read_stored_credential(target: str = CREDENTIAL_TARGET) -> tuple[str, str] | None:
+    try:
+        import win32cred
+    except ImportError as exc:
+        raise RuntimeError("pywin32 is required for Windows Credential Manager support.") from exc
+
+    try:
+        credential = win32cred.CredRead(target, win32cred.CRED_TYPE_GENERIC)
+    except Exception:
+        return None
+
+    username = str(credential.get("UserName") or "")
+    blob = credential.get("CredentialBlob") or b""
+    if isinstance(blob, bytes):
+        password = blob.decode("utf-16-le", errors="ignore")
+        if not password:
+            password = blob.decode("utf-8", errors="ignore")
+    else:
+        password = str(blob)
+    return username, password
+
+
+def save_stored_credential(username: str, password: str, target: str = CREDENTIAL_TARGET) -> None:
+    try:
+        import win32cred
+    except ImportError as exc:
+        raise RuntimeError("pywin32 is required for Windows Credential Manager support.") from exc
+
+    win32cred.CredWrite(
+        {
+            "Type": win32cred.CRED_TYPE_GENERIC,
+            "TargetName": target,
+            "UserName": username,
+            "CredentialBlob": password,
+            "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE,
+        },
+        0,
+    )
+
+
+def delete_stored_credential(target: str = CREDENTIAL_TARGET) -> bool:
+    try:
+        import win32cred
+    except ImportError as exc:
+        raise RuntimeError("pywin32 is required for Windows Credential Manager support.") from exc
+
+    try:
+        win32cred.CredDelete(target, win32cred.CRED_TYPE_GENERIC)
+        return True
+    except Exception:
+        return False
+
+
+def credential_save(args: argparse.Namespace) -> None:
+    username = args.username or getpass.getuser()
+    password = ""
+    if args.password_stdin:
+        password = sys.stdin.read().rstrip("\r\n")
+    elif args.gui:
+        try:
+            import tkinter as tk
+            from tkinter import simpledialog
+
+            root = tk.Tk()
+            root.withdraw()
+            password = simpledialog.askstring("ICC Password", "Enter ICC password", show="*") or ""
+            root.destroy()
+        except Exception as exc:
+            raise RuntimeError(f"Could not open credential prompt: {exc}") from exc
+    else:
+        password = getpass.getpass("ICC password: ")
+
+    if not password:
+        raise RuntimeError("Password was empty; credential was not saved.")
+    save_stored_credential(username, password, args.target)
+    print(f"Credential saved for target {args.target!r} and user {username!r}.")
+
+
+def credential_status(args: argparse.Namespace) -> None:
+    credential = read_stored_credential(args.target)
+    if credential is None:
+        print(f"No credential found for target {args.target!r}.")
+        return
+    username, password = credential
+    print(
+        f"Credential found for target {args.target!r}; "
+        f"user={username!r}; password_length={len(password)}"
+    )
+
+
+def credential_delete(args: argparse.Namespace) -> None:
+    deleted = delete_stored_credential(args.target)
+    if deleted:
+        print(f"Credential deleted for target {args.target!r}.")
+    else:
+        print(f"No credential was deleted for target {args.target!r}.")
+
+
 def bring_to_front(info: WindowInfo) -> None:
     import win32con
     import win32gui
 
     win32gui.ShowWindow(info.handle, win32con.SW_RESTORE)
     time.sleep(0.2)
+    try:
+        win32gui.SetWindowPos(
+            info.handle,
+            win32con.HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE,
+        )
+        time.sleep(0.1)
+        win32gui.SetWindowPos(
+            info.handle,
+            win32con.HWND_NOTOPMOST,
+            0,
+            0,
+            0,
+            0,
+            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE,
+        )
+    except Exception:
+        pass
     try:
         win32gui.SetForegroundWindow(info.handle)
     except Exception:
@@ -262,10 +385,14 @@ def window_rect(info: WindowInfo) -> tuple[int, int, int, int]:
 
 
 def rel_point(info: WindowInfo, rel_x: int, rel_y: int) -> tuple[int, int]:
+    return scaled_point(info, rel_x, rel_y, BASE_WINDOW_SIZE)
+
+
+def scaled_point(info: WindowInfo, rel_x: int, rel_y: int, base_size: tuple[int, int]) -> tuple[int, int]:
     left, top, right, bottom = window_rect(info)
     width = max(1, right - left)
     height = max(1, bottom - top)
-    base_width, base_height = BASE_WINDOW_SIZE
+    base_width, base_height = base_size
     return (
         left + round(rel_x * width / base_width),
         top + round(rel_y * height / base_height),
@@ -283,6 +410,24 @@ def click_rel(info: WindowInfo, rel_x: int, rel_y: int, *, double: bool = False)
     time.sleep(0.2)
 
 
+def click_scaled(
+    info: WindowInfo,
+    rel_x: int,
+    rel_y: int,
+    base_size: tuple[int, int],
+    *,
+    double: bool = False,
+) -> None:
+    from pywinauto import mouse
+
+    coords = scaled_point(info, rel_x, rel_y, base_size)
+    if double:
+        mouse.double_click(button="left", coords=coords)
+    else:
+        mouse.click(button="left", coords=coords)
+    time.sleep(0.2)
+
+
 def paste_text(value: str) -> None:
     import pyperclip
     from pywinauto import keyboard
@@ -292,6 +437,34 @@ def paste_text(value: str) -> None:
     pyperclip.copy(value)
     keyboard.send_keys("^v")
     time.sleep(0.2)
+
+
+def try_auto_login(args: argparse.Namespace, login: WindowInfo) -> bool:
+    credential = read_stored_credential(args.credential_target)
+    if credential is None:
+        return False
+
+    username, password = credential
+    if not password:
+        return False
+
+    bring_to_front(login)
+    if username:
+        click_scaled(login, 510, 112, LOGIN_WINDOW_SIZE)
+        paste_text(username)
+    click_scaled(login, 510, 160, LOGIN_WINDOW_SIZE)
+    paste_text(password)
+    click_scaled(login, 570, 205, LOGIN_WINDOW_SIZE)
+
+    deadline = time.monotonic() + args.login_after_wait
+    while time.monotonic() < deadline:
+        windows = collect_windows()
+        if login_window(windows) is None and main_window(windows) is not None:
+            print("ICC auto-login completed with Windows Credential Manager.")
+            return True
+        time.sleep(1)
+
+    return login_window() is None
 
 
 def ensure_main_window(args: argparse.Namespace) -> WindowInfo:
@@ -311,7 +484,15 @@ def ensure_main_window(args: argparse.Namespace) -> WindowInfo:
             time.sleep(1)
 
     windows = collect_windows()
-    if login_window(windows) is not None:
+    login = login_window(windows)
+    if login is not None:
+        if try_auto_login(args, login):
+            windows = collect_windows()
+        else:
+            windows = collect_windows()
+
+    login = login_window(windows)
+    if login is not None:
         if args.login_timeout <= 0:
             raise RuntimeError("ICC login is required. Log in manually, then run the task again.")
         wait_args = argparse.Namespace(
@@ -333,17 +514,12 @@ def ensure_main_window(args: argparse.Namespace) -> WindowInfo:
 
 
 def open_on_demand_data(info: WindowInfo) -> None:
-    from pywinauto import keyboard
-
     click_rel(info, 1160, 41)
     paste_text("On-Demand Data")
     click_rel(info, 1240, 41)
     time.sleep(1.0)
-    click_rel(info, 955, 96)
-    click_rel(info, 1050, 370)
+    click_rel(info, 955, 96, double=True)
     time.sleep(5.0)
-    keyboard.send_keys("{ESC}")
-    time.sleep(0.2)
 
 
 def select_document(info: WindowInfo, document_name: str) -> None:
@@ -573,6 +749,8 @@ def parse_args() -> argparse.Namespace:
     download.add_argument("--no-launch", action="store_true")
     download.add_argument("--launch-timeout", type=int, default=60)
     download.add_argument("--login-timeout", type=int, default=0)
+    download.add_argument("--login-after-wait", type=int, default=20)
+    download.add_argument("--credential-target", default=CREDENTIAL_TARGET)
     download.add_argument("--document-name", default=DEFAULT_DOCUMENT_NAME)
     download.add_argument("--org", default="O")
     download.add_argument("--division", default="D")
@@ -593,6 +771,21 @@ def parse_args() -> argparse.Namespace:
     download.add_argument("--screenshot", action="store_true")
     download.add_argument("--output-dir", default=str(DEFAULT_LOG_DIR))
     download.set_defaults(func=run_xplatform_download)
+
+    save = subparsers.add_parser("credential-save", help="Save the ICC password to Windows Credential Manager.")
+    save.add_argument("--target", default=CREDENTIAL_TARGET)
+    save.add_argument("--username", default=getpass.getuser())
+    save.add_argument("--password-stdin", action="store_true")
+    save.add_argument("--gui", action="store_true")
+    save.set_defaults(func=credential_save)
+
+    cred_status = subparsers.add_parser("credential-status", help="Check whether the ICC credential exists.")
+    cred_status.add_argument("--target", default=CREDENTIAL_TARGET)
+    cred_status.set_defaults(func=credential_status)
+
+    delete = subparsers.add_parser("credential-delete", help="Delete the ICC credential.")
+    delete.add_argument("--target", default=CREDENTIAL_TARGET)
+    delete.set_defaults(func=credential_delete)
 
     return parser.parse_args()
 
