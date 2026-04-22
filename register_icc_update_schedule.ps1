@@ -3,6 +3,7 @@ param(
     [string]$Url = $env:ICC_URL,
     [string[]]$Times = @("08:00", "13:00"),
     [bool]$Headless = $true,
+    [bool]$XPlatform = $true,
     [bool]$Deploy = $true
 )
 
@@ -23,7 +24,10 @@ $taskArgs = @(
 if ($Url) {
     $taskArgs += @("-Url", ('"{0}"' -f $Url))
 }
-if ($Headless) {
+if ($XPlatform) {
+    $taskArgs += "-XPlatform"
+}
+if ($Headless -and -not $XPlatform) {
     $taskArgs += "-Headless"
 }
 if ($Deploy) {
@@ -61,11 +65,11 @@ Register-ScheduledTask `
     -Trigger $triggers `
     -Settings $settings `
     -Principal $principal `
-    -Description "Updates the EFC/LSS ICC dashboard at 08:00 and 13:00, then deploys changed data to GitHub Pages." | Out-Null
+    -Description "Updates the EFC/LSS ICC dashboard at 08:00 and 13:00 through XPlatform, then deploys changed data to GitHub Pages." | Out-Null
 
 Write-Host "Registered scheduled task: $TaskName"
 Write-Host ("Times: {0}" -f ($Times -join ", "))
 Write-Host ("Action: powershell.exe {0}" -f ($taskArgs -join " "))
-if (-not $Url) {
-    Write-Warning "ICC_URL is not set. The task is registered, but ICC download needs ICC_URL or a reusable browser session."
+if (-not $Url -and -not $XPlatform) {
+    Write-Warning "ICC_URL is not set. The browser task is registered, but ICC download needs ICC_URL or a reusable browser session."
 }

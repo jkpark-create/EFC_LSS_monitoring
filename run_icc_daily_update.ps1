@@ -1,6 +1,7 @@
 param(
     [string]$Url = $env:ICC_URL,
     [switch]$Headless,
+    [switch]$XPlatform,
     [string]$DownloadFile,
     [switch]$Deploy,
     [switch]$NoLog
@@ -19,6 +20,24 @@ if (-not $NoLog) {
 
 try {
     Write-Host ("ICC daily update started at {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))
+
+    if ($XPlatform -and -not $DownloadFile) {
+        $downloadDir = Join-Path $PSScriptRoot "downloads"
+        New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
+        $DownloadFile = Join-Path $downloadDir ("xplatform_DynamicList_{0}.csv" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+
+        $xplatformArguments = @(
+            ".\xplatform_icc_helper.py",
+            "download",
+            "--output-file", $DownloadFile
+        )
+
+        Write-Host "Downloading ICC data through XPlatform."
+        py @xplatformArguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "xplatform_icc_helper.py failed with exit code $LASTEXITCODE"
+        }
+    }
 
     $arguments = @(".\icc_daily_update.py")
 
