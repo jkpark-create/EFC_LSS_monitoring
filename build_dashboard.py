@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import json
 import os
 import re
@@ -279,8 +280,13 @@ def read_rows() -> tuple[list[dict], dict]:
                 }
             )
 
+    now = dt.datetime.now().astimezone()
+    source_modified = dt.datetime.fromtimestamp(SOURCE_CSV.stat().st_mtime).astimezone()
     meta = {
         "source": SOURCE_CSV.name,
+        "updatedAt": source_modified.isoformat(timespec="seconds"),
+        "builtAt": now.isoformat(timespec="seconds"),
+        "sourceModifiedAt": source_modified.isoformat(timespec="seconds"),
         "rawRows": raw_rows,
         "targetRows": len(records),
         "skippedSummaryRows": skipped_summary,
@@ -1187,7 +1193,9 @@ HTML = r"""<!doctype html>
           const sales = meta.salesMapping && meta.salesMapping.found
             ? ` · 영업사원 ${num(meta.salesMapping.matchedRows)} rows 매핑`
             : " · 영업사원 매핑 없음";
-          return `${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows${sales}`;
+          const updated = formatKstDate(meta.updatedAt || meta.sourceModifiedAt, "ko-KR");
+          const updatedText = updated ? `업데이트 기준 ${updated} · ` : "";
+          return `${updatedText}${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows${sales}`;
         },
         filters: {
           charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
@@ -1251,7 +1259,9 @@ HTML = r"""<!doctype html>
           const sales = meta.salesMapping && meta.salesMapping.found
             ? ` · ${num(meta.salesMapping.matchedRows)} rows sales-mapped`
             : " · no salesperson mapping";
-          return `${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped${sales}`;
+          const updated = formatKstDate(meta.updatedAt || meta.sourceModifiedAt, "en-US");
+          const updatedText = updated ? `Updated ${updated} · ` : "";
+          return `${updatedText}${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped${sales}`;
         },
         filters: {
           charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
@@ -1334,6 +1344,22 @@ HTML = r"""<!doctype html>
 
     function num(value) {
       return Math.round(value || 0).toLocaleString("en-US");
+    }
+
+    function formatKstDate(value, locale) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const formatted = new Intl.DateTimeFormat(locale, {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(date);
+      return `${formatted} KST`;
     }
 
     function pct(value) {
