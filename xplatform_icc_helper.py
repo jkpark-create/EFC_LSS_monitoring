@@ -212,6 +212,19 @@ def capture_window(info: WindowInfo, output_dir: Path, prefix: str = "xplatform"
     return output
 
 
+def capture_diagnostic_windows(output_dir: Path, prefix: str) -> list[Path]:
+    captures: list[Path] = []
+    windows = collect_windows()
+    for info in windows:
+        if visible_area(info) <= 0:
+            continue
+        try:
+            captures.append(capture_window(info, output_dir, prefix=prefix))
+        except Exception as exc:
+            print(f"Could not capture diagnostic window {info.handle}: {exc}", file=sys.stderr)
+    return captures
+
+
 def main_window(windows: list[WindowInfo] | None = None) -> WindowInfo | None:
     candidates = [
         info
@@ -428,15 +441,92 @@ def click_scaled(
     time.sleep(0.2)
 
 
-def paste_text(value: str) -> None:
+def paste_text(value: str, *, clear: bool = True) -> None:
     import pyperclip
     from pywinauto import keyboard
 
-    keyboard.send_keys("^a")
-    time.sleep(0.1)
+    try:
+        previous_clipboard = pyperclip.paste()
+    except Exception:
+        previous_clipboard = None
+
+    if clear:
+        keyboard.send_keys("^a")
+        time.sleep(0.1)
     pyperclip.copy(value)
     keyboard.send_keys("^v")
     time.sleep(0.2)
+    if previous_clipboard is not None:
+        try:
+            pyperclip.copy(previous_clipboard)
+        except Exception:
+            pass
+
+
+def set_focused_text(value: str) -> None:
+    from pywinauto import keyboard
+
+    paste_text(value)
+    time.sleep(0.1)
+    # Some XPlatform password boxes ignore clipboard paste on a restored login form.
+    # Backspace and paste a second time makes the operation idempotent when the first
+    # Ctrl+V landed in the wrong field or was swallowed while focus was settling.
+    keyboard.send_keys("^a")
+    time.sleep(0.1)
+    keyboard.send_keys("{BACKSPACE}")
+    time.sleep(0.1)
+    paste_text(value, clear=False)
+
+
+def edit_controls(info: WindowInfo) -> list[object]:
+    descendants = getattr(info.wrapper, "descendants", None)
+    if not callable(descendants):
+        return []
+
+    for kwargs in ({"control_type": "Edit"}, {"class_name": "Edit"}):
+        try:
+            controls = list(descendants(**kwargs))
+        except Exception:
+            continue
+        if controls:
+            return controls
+    return []
+
+
+def set_control_text(control: object, value: str) -> bool:
+    try:
+        set_focus = getattr(control, "set_focus", None)
+        if callable(set_focus):
+            set_focus()
+            time.sleep(0.2)
+    except Exception:
+        pass
+
+    for method_name in ("set_edit_text", "set_text"):
+        method = getattr(control, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            method(value)
+            time.sleep(0.2)
+            return True
+        except Exception:
+            pass
+
+    try:
+        set_focused_text(value)
+        return True
+    except Exception:
+        return False
+
+
+def submit_login(login: WindowInfo) -> None:
+    from pywinauto import keyboard
+
+    click_scaled(login, 570, 205, LOGIN_WINDOW_SIZE)
+    time.sleep(0.5)
+    keyboard.send_keys("{ENTER}")
+    time.sleep(0.5)
 
 
 def try_auto_login(args: argparse.Namespace, login: WindowInfo) -> bool:
@@ -448,22 +538,39 @@ def try_auto_login(args: argparse.Namespace, login: WindowInfo) -> bool:
     if not password:
         return False
 
-    bring_to_front(login)
-    if username:
-        click_scaled(login, 510, 112, LOGIN_WINDOW_SIZE)
-        paste_text(username)
-    click_scaled(login, 510, 160, LOGIN_WINDOW_SIZE)
-    paste_text(password)
-    click_scaled(login, 570, 205, LOGIN_WINDOW_SIZE)
+    print("Attempting ICC auto-login with Windows Credential Manager.")
+    for attempt in range(1, args.login_auto_attempts + 1):
+        fresh_login = login_window() or login
+        bring_to_front(fresh_login)
 
-    deadline = time.monotonic() + args.login_after_wait
-    while time.monotonic() < deadline:
-        windows = collect_windows()
-        if login_window(windows) is None and main_window(windows) is not None:
-            print("ICC auto-login completed with Windows Credential Manager.")
-            return True
-        time.sleep(1)
+        controls = edit_controls(fresh_login)
+        if len(controls) >= 2:
+            if username:
+                set_control_text(controls[0], username)
+            set_control_text(controls[1], password)
+        else:
+            if username:
+                click_scaled(fresh_login, 510, 112, LOGIN_WINDOW_SIZE)
+                set_focused_text(username)
+            click_scaled(fresh_login, 510, 160, LOGIN_WINDOW_SIZE)
+            set_focused_text(password)
 
+        submit_login(fresh_login)
+
+        deadline = time.monotonic() + args.login_after_wait
+        while time.monotonic() < deadline:
+            windows = collect_windows()
+            if login_window(windows) is None and main_window(windows) is not None:
+                print("ICC auto-login completed with Windows Credential Manager.")
+                return True
+            time.sleep(1)
+
+        if attempt < args.login_auto_attempts:
+            print(f"ICC auto-login did not finish; retrying ({attempt + 1}/{args.login_auto_attempts}).")
+
+    captures = capture_diagnostic_windows(Path(args.output_dir), "xplatform_login_fail")
+    for capture in captures:
+        print(f"Login diagnostic screenshot: {capture.resolve()}")
     return login_window() is None
 
 
@@ -561,7 +668,31 @@ def close_dynamiclist_workbooks() -> None:
         name = str(workbook.Name or "").lower()
         full_name = str(getattr(workbook, "FullName", "") or "").lower()
         if name == "dynamiclist.csv" or full_name.endswith("\\dynamiclist.csv"):
-            workbook.Close(SaveChanges=False)
+            close_workbook_and_empty_excel(workbook)
+
+
+def close_workbook_and_empty_excel(workbook: object) -> None:
+    excel = None
+    try:
+        excel = workbook.Application
+    except Exception:
+        pass
+
+    try:
+        workbook.Close(SaveChanges=False)
+    except Exception as exc:
+        print(f"Could not close Excel export workbook: {exc}", file=sys.stderr)
+        return
+
+    if excel is None:
+        return
+
+    try:
+        if int(excel.Workbooks.Count) == 0:
+            excel.Quit()
+            print("Closed empty Excel application.")
+    except Exception as exc:
+        print(f"Could not close empty Excel application: {exc}", file=sys.stderr)
 
 
 def find_excel_export(timeout: int, min_rows: int) -> tuple[object, Path]:
@@ -629,17 +760,50 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
     print(f"Search clicked. Waiting {args.search_wait} seconds for ICC results.")
     time.sleep(args.search_wait)
 
-    close_dynamiclist_workbooks()
-    click_rel(info, 1110, 101)
-    print("Excel Down clicked. Waiting for DynamicList.CSV in Excel.")
-    workbook, source = find_excel_export(args.export_timeout, args.min_export_rows)
+    workbook = None
+    source = None
+    last_export_error: Exception | None = None
+    for attempt in range(1, args.export_attempts + 1):
+        close_dynamiclist_workbooks()
+        click_rel(info, 1110, 101)
+        suffix = "" if args.export_attempts == 1 else f" (attempt {attempt}/{args.export_attempts})"
+        print(f"Excel Down clicked. Waiting for DynamicList.CSV in Excel{suffix}.")
+        try:
+            workbook, source = find_excel_export(args.export_timeout, args.min_export_rows)
+            break
+        except Exception as exc:
+            last_export_error = exc
+            captures = capture_diagnostic_windows(Path(args.output_dir), "xplatform_after_export_fail")
+            if captures:
+                for capture in captures:
+                    print(f"Diagnostic screenshot: {capture.resolve()}")
+            if attempt >= args.export_attempts:
+                break
+
+            print(
+                "Excel export was not detected. Retrying Search and Excel Down after "
+                f"{args.export_retry_wait} seconds."
+            )
+            time.sleep(args.export_retry_wait)
+            info = ensure_main_window(args)
+            click_rel(info, 1190, 138)
+            print(f"Search clicked. Waiting {args.search_wait} seconds for ICC results.")
+            time.sleep(args.search_wait)
+
+    if workbook is None or source is None:
+        close_dynamiclist_workbooks()
+        raise RuntimeError(
+            "Timed out waiting for DynamicList.CSV in Excel after Excel Down. "
+            "For scheduled runs, keep the Windows session logged in and unlocked so "
+            "XPlatform and Excel can open on the interactive desktop."
+        ) from last_export_error
 
     output = Path(args.output_file)
     copied = copy_excel_export(source, output)
     print(f"Saved XPlatform export: {copied.resolve()}")
 
     if args.close_excel_export:
-        workbook.Close(SaveChanges=False)
+        close_workbook_and_empty_excel(workbook)
 
     if args.screenshot:
         fresh = main_window()
@@ -750,6 +914,7 @@ def parse_args() -> argparse.Namespace:
     download.add_argument("--launch-timeout", type=int, default=60)
     download.add_argument("--login-timeout", type=int, default=0)
     download.add_argument("--login-after-wait", type=int, default=20)
+    download.add_argument("--login-auto-attempts", type=int, default=2)
     download.add_argument("--credential-target", default=CREDENTIAL_TARGET)
     download.add_argument("--document-name", default=DEFAULT_DOCUMENT_NAME)
     download.add_argument("--org", default="O")
@@ -766,6 +931,8 @@ def parse_args() -> argparse.Namespace:
     )
     download.add_argument("--search-wait", type=int, default=45)
     download.add_argument("--export-timeout", type=int, default=120)
+    download.add_argument("--export-attempts", type=int, default=2)
+    download.add_argument("--export-retry-wait", type=int, default=10)
     download.add_argument("--min-export-rows", type=int, default=100)
     download.add_argument("--close-excel-export", action=argparse.BooleanOptionalAction, default=True)
     download.add_argument("--screenshot", action="store_true")
