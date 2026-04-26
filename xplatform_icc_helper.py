@@ -21,6 +21,12 @@ DEFAULT_DOWNLOAD_DIR = Path("downloads")
 BASE_WINDOW_SIZE = (1280, 728)
 LOGIN_WINDOW_SIZE = (648, 368)
 CREDENTIAL_TARGET = "EFC_LSS_ICC_XPLATFORM"
+FATAL_DIALOG_TITLE_TOKENS = (
+    "XPlatform.exe",
+    "\uc751\uc6a9 \ud504\ub85c\uadf8\ub7a8 \uc624\ub958",
+    "application error",
+)
+BUSY_MODAL_AREA_RANGE = (10_000, 120_000)
 
 
 @dataclass(frozen=True)
@@ -94,7 +100,9 @@ def window_handle(wrapper: object) -> int:
 def looks_like_xplatform(title: str, class_name: str) -> bool:
     if class_name == "CyWindowClass":
         return True
-    return title in {"Login Form"} or title.startswith("KMTC :: ICC")
+    if title in {"Login Form"} or title.startswith("KMTC :: ICC"):
+        return True
+    return any(token.lower() in title.lower() for token in FATAL_DIALOG_TITLE_TOKENS)
 
 
 def collect_windows(backends: Iterable[str] = ("uia", "win32")) -> list[WindowInfo]:
@@ -190,6 +198,138 @@ def print_windows(windows: list[WindowInfo]) -> None:
                 rect=info.rectangle,
             )
         )
+
+
+def fatal_error_windows(windows: list[WindowInfo] | None = None) -> list[WindowInfo]:
+    matches: list[WindowInfo] = []
+    source = windows if windows is not None else collect_windows()
+    for info in source:
+        text = " ".join(part for part in (info.title, window_text_snapshot(info)) if part)
+        if any(token.lower() in text.lower() for token in FATAL_DIALOG_TITLE_TOKENS):
+            matches.append(info)
+    return matches
+
+
+def window_text_snapshot(info: WindowInfo) -> str:
+    parts = [info.title]
+    descendants = getattr(info.wrapper, "descendants", None)
+    if callable(descendants):
+        try:
+            for child in descendants()[:50]:
+                text = window_title(child)
+                if text:
+                    parts.append(text)
+        except Exception:
+            pass
+    return " ".join(part for part in parts if part)
+
+
+def visible_blank_modal_windows(windows: list[WindowInfo] | None = None) -> list[WindowInfo]:
+    modals: list[WindowInfo] = []
+    source = windows if windows is not None else collect_windows()
+    main_handles = {info.handle for info in source if info.title.startswith("KMTC :: ICC")}
+    for info in source:
+        if info.handle in main_handles:
+            continue
+        if info.class_name != "CyWindowClass" or info.title:
+            continue
+        area = visible_area(info)
+        if BUSY_MODAL_AREA_RANGE[0] <= area <= BUSY_MODAL_AREA_RANGE[1]:
+            modals.append(info)
+    return modals
+
+
+def dismiss_fatal_error_dialogs(windows: list[WindowInfo] | None = None) -> bool:
+    dialogs = fatal_error_windows(windows)
+    if not dialogs:
+        return False
+
+    from pywinauto import keyboard
+
+    for dialog in dialogs:
+        try:
+            bring_to_front(dialog)
+            keyboard.send_keys("{ENTER}")
+            time.sleep(0.5)
+        except Exception as exc:
+            print(f"Could not dismiss XPlatform error dialog {dialog.handle}: {exc}", file=sys.stderr)
+    return True
+
+
+def terminate_xplatform_processes(windows: list[WindowInfo] | None = None) -> None:
+    pids = {
+        info.process_id
+        for info in (windows if windows is not None else collect_windows())
+        if info.process_id and (info.class_name == "CyWindowClass" or "XPlatform" in info.title)
+    }
+    for pid in sorted(pids):
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            print(f"Terminated stale XPlatform process pid={pid}.")
+        except Exception as exc:
+            print(f"Could not terminate XPlatform process pid={pid}: {exc}", file=sys.stderr)
+
+
+def recover_from_fatal_xplatform_error(prefix: str, output_dir: Path) -> bool:
+    windows = collect_windows()
+    if not fatal_error_windows(windows):
+        return False
+
+    captures = capture_diagnostic_windows(output_dir, prefix)
+    for capture in captures:
+        print(f"Diagnostic screenshot: {capture.resolve()}")
+    dismiss_fatal_error_dialogs(windows)
+    terminate_xplatform_processes(windows)
+    time.sleep(3)
+    return True
+
+
+def recover_from_stale_loading_modal(prefix: str, output_dir: Path) -> bool:
+    windows = collect_windows()
+    if fatal_error_windows(windows):
+        return recover_from_fatal_xplatform_error(prefix, output_dir)
+    if not visible_blank_modal_windows(windows):
+        return False
+
+    captures = capture_diagnostic_windows(output_dir, prefix)
+    for capture in captures:
+        print(f"Diagnostic screenshot: {capture.resolve()}")
+    print("XPlatform is blocked by a loading dialog; restarting the client.")
+    terminate_xplatform_processes(windows)
+    time.sleep(3)
+    return True
+
+
+def wait_for_blank_modals_to_clear(timeout: int, output_dir: Path, prefix: str) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        windows = collect_windows()
+        if fatal_error_windows(windows):
+            recover_from_fatal_xplatform_error(prefix, output_dir)
+            raise RuntimeError("XPlatform showed an application error and was restarted.")
+        if not visible_blank_modal_windows(windows):
+            return
+        time.sleep(2)
+
+    captures = capture_diagnostic_windows(output_dir, prefix)
+    for capture in captures:
+        print(f"Diagnostic screenshot: {capture.resolve()}")
+    raise RuntimeError("Timed out waiting for XPlatform loading dialog to disappear.")
+
+
+def sleep_with_xplatform_checks(seconds: int, output_dir: Path, prefix: str) -> None:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        windows = collect_windows()
+        if fatal_error_windows(windows):
+            recover_from_fatal_xplatform_error(prefix, output_dir)
+            raise RuntimeError("XPlatform showed an application error and was restarted.")
+        time.sleep(min(2, max(0.1, deadline - time.monotonic())))
 
 
 def capture_window(info: WindowInfo, output_dir: Path, prefix: str = "xplatform") -> Path:
@@ -749,16 +889,23 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
         f"org {args.org}, division {args.division}"
     )
 
+    recover_from_fatal_xplatform_error("xplatform_before_start_error", Path(args.output_dir))
+    recover_from_stale_loading_modal("xplatform_before_start_busy", Path(args.output_dir))
+
     info = ensure_main_window(args)
     open_on_demand_data(info)
+    wait_for_blank_modals_to_clear(args.launch_timeout, Path(args.output_dir), "xplatform_open_menu_wait")
     info = ensure_main_window(args)
     select_document(info, args.document_name)
+    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_document_wait")
     set_conditions(info, window, args.org, args.division)
+    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_conditions_wait")
 
     close_dynamiclist_workbooks()
     click_rel(info, 1190, 138)
     print(f"Search clicked. Waiting {args.search_wait} seconds for ICC results.")
-    time.sleep(args.search_wait)
+    sleep_with_xplatform_checks(args.search_wait, Path(args.output_dir), "xplatform_search_wait")
+    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_search_busy_wait")
 
     workbook = None
     source = None
@@ -784,11 +931,16 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
                 "Excel export was not detected. Retrying Search and Excel Down after "
                 f"{args.export_retry_wait} seconds."
             )
-            time.sleep(args.export_retry_wait)
+            sleep_with_xplatform_checks(
+                args.export_retry_wait,
+                Path(args.output_dir),
+                "xplatform_export_retry_wait",
+            )
             info = ensure_main_window(args)
             click_rel(info, 1190, 138)
             print(f"Search clicked. Waiting {args.search_wait} seconds for ICC results.")
-            time.sleep(args.search_wait)
+            sleep_with_xplatform_checks(args.search_wait, Path(args.output_dir), "xplatform_search_retry_wait")
+            wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_search_retry_busy_wait")
 
     if workbook is None or source is None:
         close_dynamiclist_workbooks()
