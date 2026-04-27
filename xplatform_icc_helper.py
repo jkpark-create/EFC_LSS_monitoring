@@ -107,42 +107,55 @@ def looks_like_xplatform(title: str, class_name: str) -> bool:
     return any(token.lower() in title.lower() for token in FATAL_DIALOG_TITLE_TOKENS)
 
 
+def get_window_text_safe(hwnd: int, timeout_ms: int = 50) -> str:
+    import ctypes
+    from ctypes import wintypes
+    import win32con
+    user32 = ctypes.windll.user32
+    length = wintypes.DWORD()
+    res = user32.SendMessageTimeoutW(
+        hwnd, win32con.WM_GETTEXTLENGTH, 0, 0, win32con.SMTO_ABORTIFHUNG, timeout_ms, ctypes.byref(length)
+    )
+    if res == 0 or length.value == 0:
+        return ""
+    buf = ctypes.create_unicode_buffer(length.value + 1)
+    res = user32.SendMessageTimeoutW(
+        hwnd, win32con.WM_GETTEXT, length.value + 1, wintypes.LPARAM(ctypes.addressof(buf)), win32con.SMTO_ABORTIFHUNG, timeout_ms, ctypes.byref(length)
+    )
+    if res == 0:
+        return ""
+    return buf.value
+
+
 def collect_windows(backends: Iterable[str] = ("uia", "win32")) -> list[WindowInfo]:
+    import win32gui
+    import win32process
     windows: list[WindowInfo] = []
-    seen: set[tuple[str, int]] = set()
 
-    for backend in backends:
-        try:
-            desktop = load_desktop(backend)
-            wrappers = desktop.windows()
-        except Exception as exc:
-            print(f"{backend}: could not enumerate windows: {exc}", file=sys.stderr)
-            continue
-
-        for wrapper in wrappers:
-            title = window_title(wrapper)
-            class_name = window_class(wrapper)
+    def callback(hwnd, extra):
+        if win32gui.IsWindowVisible(hwnd):
+            class_name = win32gui.GetClassName(hwnd)
+            title = get_window_text_safe(hwnd)
             if not looks_like_xplatform(title, class_name):
-                continue
-
-            handle = window_handle(wrapper)
-            key = (backend, handle)
-            if key in seen:
-                continue
-            seen.add(key)
-
+                return True
+                
+            rect = win32gui.GetWindowRect(hwnd)
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            
             windows.append(
                 WindowInfo(
-                    backend=backend,
-                    handle=handle,
-                    process_id=process_id(wrapper),
+                    backend="win32",
+                    handle=hwnd,
+                    process_id=pid,
                     title=title,
                     class_name=class_name,
-                    rectangle=window_rectangle(wrapper),
-                    wrapper=wrapper,
+                    rectangle=str(rect),
+                    wrapper=None,
                 )
             )
+        return True
 
+    win32gui.EnumWindows(callback, None)
     return windows
 
 
@@ -326,21 +339,56 @@ def recover_from_stale_loading_modal(prefix: str, output_dir: Path) -> bool:
     return True
 
 
-def wait_for_blank_modals_to_clear(timeout: int, output_dir: Path, prefix: str) -> None:
+def try_dismiss_loading_modal_by_click(main: WindowInfo | None) -> None:
+    """Find the persistent loading overlay windows and send WM_CLOSE to forcefully dismiss them."""
+    if main is None:
+        return
+    try:
+        import win32gui
+        import win32con
+        handles = get_safe_blank_modal_handles()
+        for hwnd in handles:
+            print(f"Force closing stuck loading modal (handle: {hwnd})")
+            win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+        time.sleep(1)
+    except Exception as exc:
+        print(f"Failed to force close modal: {exc}")
+
+
+def wait_for_blank_modals_to_clear(
+    timeout: int,
+    output_dir: Path,
+    prefix: str,
+    *,
+    raise_on_timeout: bool = True,
+    dismiss_interval: int = 30,
+) -> bool:
+    """Wait until loading modals clear. Returns True if cleared, False if timed out.
+    If raise_on_timeout is False, logs a warning and returns False instead of raising.
+    Periodically clicks the main window to try to dismiss a stuck loading overlay.
+    """
     deadline = time.monotonic() + timeout
+    last_dismiss = time.monotonic()
     while time.monotonic() < deadline:
         windows = collect_windows()
         if fatal_error_windows(windows):
             recover_from_fatal_xplatform_error(prefix, output_dir)
             raise RuntimeError("XPlatform showed an application error and was restarted.")
         if not visible_blank_modal_windows(windows):
-            return
+            return True
+        # Periodically click the main window to try to dismiss a stuck modal
+        if time.monotonic() - last_dismiss >= dismiss_interval:
+            try_dismiss_loading_modal_by_click(main_window(windows))
+            last_dismiss = time.monotonic()
         time.sleep(2)
 
     captures = capture_diagnostic_windows(output_dir, prefix)
     for capture in captures:
         print(f"Diagnostic screenshot: {capture.resolve()}")
-    raise RuntimeError("Timed out waiting for XPlatform loading dialog to disappear.")
+    if raise_on_timeout:
+        raise RuntimeError("Timed out waiting for XPlatform loading dialog to disappear.")
+    print(f"Warning: loading dialog did not clear within {timeout}s; proceeding anyway.", flush=True)
+    return False
 
 
 def sleep_with_xplatform_checks(seconds: int, output_dir: Path, prefix: str) -> None:
@@ -359,17 +407,15 @@ def capture_window(info: WindowInfo, output_dir: Path, prefix: str = "xplatform"
     safe_title = "".join(char if char.isalnum() else "_" for char in (info.title or "window")).strip("_")
     output = output_dir / f"{prefix}_{safe_title}_{stamp}.png"
 
-    wrapper = info.wrapper
     try:
-        set_focus = getattr(wrapper, "set_focus", None)
-        if callable(set_focus):
-            set_focus()
-            time.sleep(0.3)
-    except Exception:
-        pass
-
-    image = wrapper.capture_as_image()
-    image.save(output)
+        from PIL import ImageGrab
+        bring_to_front(info)
+        time.sleep(0.3)
+        left, top, right, bottom = window_rect(info)
+        image = ImageGrab.grab(bbox=(left, top, right, bottom))
+        image.save(output)
+    except Exception as exc:
+        print(f"Could not capture window via PIL: {exc}", file=sys.stderr)
     return output
 
 
@@ -782,23 +828,54 @@ def ensure_main_window(args: argparse.Namespace) -> WindowInfo:
 
 
 def open_on_demand_data(info: WindowInfo) -> None:
-    click_rel(info, 1160, 41)
-    paste_text("On-Demand Data")
-    click_rel(info, 1240, 41)
+    from pywinauto import keyboard
+    bring_to_front(info)
+    time.sleep(2.0)
+    
+    # 1. 상단 Document 메뉴 클릭 (1280x728 기준 x=420, y=55)
+    print("Clicking Document menu...")
+    click_rel(info, 420, 55)
+    time.sleep(2.5)
+    
+    # 2. On-Demand Data 메뉴 검색 (검색창 클릭 x=915, y=55)
+    # 검색창을 확실히 활성화하기 위해 더블 클릭 시도
+    print("Searching for On-Demand Data...")
+    click_rel(info, 915, 55, double=True)
     time.sleep(1.0)
-    click_rel(info, 955, 96, double=True)
-    time.sleep(5.0)
+    keyboard.send_keys("^a{BACKSPACE}")
+    time.sleep(0.5)
+    keyboard.send_keys("On-Demand Data", with_spaces=True)
+    time.sleep(1.5)
+    keyboard.send_keys("{ENTER}")
+    print("Waiting for On-Demand Data tab to open...")
+    time.sleep(7.0)
 
 
 def select_document(info: WindowInfo, document_name: str) -> None:
     from pywinauto import keyboard
+    bring_to_front(info)
+    time.sleep(1.5)
 
-    click_rel(info, 540, 138)
-    time.sleep(0.5)
-    click_rel(info, 260, 138)
-    paste_text(document_name)
-    keyboard.send_keys("{ENTER}")
-    time.sleep(0.5)
+    # 텍스트 박스 먼저 더블 클릭하여 포커스 및 전체 선택
+    click_rel(info, 280, 187, double=True)
+    time.sleep(1.0)
+    keyboard.send_keys("^a{BACKSPACE}")
+    time.sleep(1.0)
+    
+    # 드롭다운 화살표 클릭하여 리스트 활성화 시도
+    click_rel(info, 420, 187)
+    time.sleep(1.0)
+    
+    # 키워드 입력
+    search_keyword = "징수금액조회" if "징수금액" in document_name else document_name
+    keyboard.send_keys(search_keyword, with_spaces=True)
+    time.sleep(1.5)
+    
+    # 필터링 트리거 및 선택
+    keyboard.send_keys("{SPACE}{BACKSPACE}")
+    time.sleep(3.0)
+    keyboard.send_keys("{DOWN}{ENTER}")
+    time.sleep(2.0)
     keyboard.send_keys("{TAB}")
     time.sleep(3.0)
 
@@ -814,10 +891,10 @@ def set_condition_value(info: WindowInfo, rel_x: int, rel_y: int, value: str) ->
 
 
 def set_conditions(info: WindowInfo, window: object, org: str, division: str) -> None:
-    set_condition_value(info, 205, 185, f"{window.start_year}{window.start_week:02d}")
-    set_condition_value(info, 205, 209, f"{window.end_year}{window.end_week:02d}")
-    set_condition_value(info, 205, 233, org)
-    set_condition_value(info, 205, 257, division)
+    set_condition_value(info, 205, 235, f"{window.start_year}{window.start_week:02d}")
+    set_condition_value(info, 205, 259, f"{window.end_year}{window.end_week:02d}")
+    set_condition_value(info, 205, 283, org)
+    set_condition_value(info, 205, 307, division)
 
 
 def close_dynamiclist_workbooks() -> None:
@@ -919,25 +996,33 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
 
     info = ensure_main_window(args)
     open_on_demand_data(info)
-    wait_for_blank_modals_to_clear(args.launch_timeout, Path(args.output_dir), "xplatform_open_menu_wait")
+    # Wait for the initial loading overlay to clear, forcefully close it if it persists
+    wait_for_blank_modals_to_clear(
+        30,  # 30초 대기 후 강제 종료 시도
+        Path(args.output_dir),
+        "xplatform_open_menu_wait",
+        raise_on_timeout=False,
+        dismiss_interval=10, # 10초마다 닫기 시도
+    )
     info = ensure_main_window(args)
     select_document(info, args.document_name)
-    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_document_wait")
+    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_document_wait", raise_on_timeout=False)
     set_conditions(info, window, args.org, args.division)
-    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_conditions_wait")
+    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_conditions_wait", raise_on_timeout=False)
 
     close_dynamiclist_workbooks()
-    click_rel(info, 1190, 138)
+    click_rel(info, 930, 187)
     print(f"Search clicked. Waiting {args.search_wait} seconds for ICC results.")
     sleep_with_xplatform_checks(args.search_wait, Path(args.output_dir), "xplatform_search_wait")
-    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_search_busy_wait")
+    wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_search_busy_wait", raise_on_timeout=False)
 
     workbook = None
     source = None
     last_export_error: Exception | None = None
     for attempt in range(1, args.export_attempts + 1):
         close_dynamiclist_workbooks()
-        click_rel(info, 1110, 101)
+        info = ensure_main_window(args)  # 핸들이 무효화되었을 수 있으므로 갱신
+        click_rel(info, 865, 101)
         suffix = "" if args.export_attempts == 1 else f" (attempt {attempt}/{args.export_attempts})"
         print(f"Excel Down clicked. Waiting for DynamicList.CSV in Excel{suffix}.")
         try:
@@ -962,7 +1047,7 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
                 "xplatform_export_retry_wait",
             )
             info = ensure_main_window(args)
-            click_rel(info, 1190, 138)
+            click_rel(info, 930, 187)
             print(f"Search clicked. Waiting {args.search_wait} seconds for ICC results.")
             sleep_with_xplatform_checks(args.search_wait, Path(args.output_dir), "xplatform_search_retry_wait")
             wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_search_retry_busy_wait")
