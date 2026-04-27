@@ -4,7 +4,8 @@ param(
     [switch]$XPlatform,
     [string]$DownloadFile,
     [switch]$Deploy,
-    [switch]$NoLog
+    [switch]$NoLog,
+    [int]$XPlatformAttempts = 3
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,16 +27,40 @@ try {
         New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
         $DownloadFile = Join-Path $downloadDir ("xplatform_DynamicList_{0}.csv" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
 
-        $xplatformArguments = @(
-            ".\xplatform_icc_helper.py",
-            "download",
-            "--output-file", $DownloadFile
-        )
-
         Write-Host "Downloading ICC data through XPlatform."
-        py @xplatformArguments
-        if ($LASTEXITCODE -ne 0) {
-            throw "xplatform_icc_helper.py failed with exit code $LASTEXITCODE"
+        for ($attempt = 1; $attempt -le $XPlatformAttempts; $attempt++) {
+            $attemptFile = $DownloadFile
+            if ($attempt -gt 1) {
+                $baseName = [System.IO.Path]::GetFileNameWithoutExtension($DownloadFile)
+                $extension = [System.IO.Path]::GetExtension($DownloadFile)
+                $attemptFile = Join-Path $downloadDir ("{0}_attempt{1}{2}" -f $baseName, $attempt, $extension)
+            }
+
+            $xplatformArguments = @(
+                ".\xplatform_icc_helper.py",
+                "download",
+                "--launch-timeout", "180",
+                "--search-wait", "60",
+                "--export-timeout", "180",
+                "--export-attempts", "3",
+                "--output-file", $attemptFile
+            )
+
+            Write-Host ("XPlatform download attempt {0}/{1}." -f $attempt, $XPlatformAttempts)
+            py @xplatformArguments
+            if ($LASTEXITCODE -eq 0) {
+                $DownloadFile = $attemptFile
+                break
+            }
+
+            $lastExitCode = $LASTEXITCODE
+            Get-Process XPlatform -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            if ($attempt -lt $XPlatformAttempts) {
+                Write-Warning ("XPlatform download failed with exit code {0}; retrying after cleanup." -f $lastExitCode)
+                Start-Sleep -Seconds 15
+            } else {
+                throw "xplatform_icc_helper.py failed after $XPlatformAttempts attempts; last exit code $lastExitCode"
+            }
         }
     }
 
