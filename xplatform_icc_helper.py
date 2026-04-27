@@ -27,6 +27,8 @@ FATAL_DIALOG_TITLE_TOKENS = (
     "application error",
 )
 BUSY_MODAL_AREA_RANGE = (10_000, 120_000)
+BUSY_MODAL_HEIGHT_RANGE = (60, 150)
+BUSY_MODAL_ASPECT_RATIO_MIN = 2.5
 
 
 @dataclass(frozen=True)
@@ -145,7 +147,14 @@ def collect_windows(backends: Iterable[str] = ("uia", "win32")) -> list[WindowIn
 
 
 def visible_area(info: WindowInfo) -> int:
-    rect = info.rectangle
+    bounds = window_bounds_from_rectangle(info.rectangle)
+    if bounds is None:
+        return 0
+    left, top, right, bottom = bounds
+    return max(0, right - left) * max(0, bottom - top)
+
+
+def window_bounds_from_rectangle(rect: str) -> tuple[int, int, int, int] | None:
     numbers: list[int] = []
     for token in rect.replace("(", " ").replace(")", " ").replace(",", " ").split():
         if len(token) > 1 and token[0] in {"L", "T", "R", "B"}:
@@ -156,9 +165,8 @@ def visible_area(info: WindowInfo) -> int:
             pass
 
     if len(numbers) < 4:
-        return 0
-    left, top, right, bottom = numbers[:4]
-    return max(0, right - left) * max(0, bottom - top)
+        return None
+    return tuple(numbers[:4])
 
 
 def best_capture_window(windows: list[WindowInfo]) -> WindowInfo | None:
@@ -233,8 +241,21 @@ def visible_blank_modal_windows(windows: list[WindowInfo] | None = None) -> list
             continue
         if info.class_name != "CyWindowClass" or info.title:
             continue
+        bounds = window_bounds_from_rectangle(info.rectangle)
+        if bounds is None:
+            continue
+        left, top, right, bottom = bounds
+        width = max(0, right - left)
+        height = max(0, bottom - top)
+        if height <= 0:
+            continue
         area = visible_area(info)
-        if BUSY_MODAL_AREA_RANGE[0] <= area <= BUSY_MODAL_AREA_RANGE[1]:
+        aspect_ratio = width / height
+        if (
+            BUSY_MODAL_AREA_RANGE[0] <= area <= BUSY_MODAL_AREA_RANGE[1]
+            and BUSY_MODAL_HEIGHT_RANGE[0] <= height <= BUSY_MODAL_HEIGHT_RANGE[1]
+            and aspect_ratio >= BUSY_MODAL_ASPECT_RATIO_MIN
+        ):
             modals.append(info)
     return modals
 
@@ -772,9 +793,13 @@ def open_on_demand_data(info: WindowInfo) -> None:
 def select_document(info: WindowInfo, document_name: str) -> None:
     from pywinauto import keyboard
 
+    click_rel(info, 540, 138)
+    time.sleep(0.5)
     click_rel(info, 260, 138)
     paste_text(document_name)
     keyboard.send_keys("{ENTER}")
+    time.sleep(0.5)
+    keyboard.send_keys("{TAB}")
     time.sleep(3.0)
 
 
