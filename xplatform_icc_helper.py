@@ -832,23 +832,25 @@ def open_on_demand_data(info: WindowInfo) -> None:
     bring_to_front(info)
     time.sleep(2.0)
     
-    # 1. 상단 Document 메뉴 클릭 (1280x728 기준 x=420, y=55)
-    print("Clicking Document menu...")
-    click_rel(info, 420, 55)
-    time.sleep(2.5)
+    # 1. 상단 Document 메뉴 클릭 (1280x728 기준 x=450, y=55)
+    print("Clicking Document menu tab...")
+    click_rel(info, 450, 55)
+    time.sleep(3.0)
     
-    # 2. On-Demand Data 메뉴 검색 (검색창 클릭 x=915, y=55)
-    # 검색창을 확실히 활성화하기 위해 더블 클릭 시도
-    print("Searching for On-Demand Data...")
-    click_rel(info, 915, 55, double=True)
-    time.sleep(1.0)
+    # 2. On-Demand Data 메뉴 검색 (검색창 클릭 x=1015, y=55)
+    # 검색창을 확실히 활성화하기 위해 여러 번 클릭 시도
+    print("Searching for On-Demand Data in Search Menu...")
+    for _ in range(2):
+        click_rel(info, 1015, 55, double=True)
+        time.sleep(0.5)
+    
     keyboard.send_keys("^a{BACKSPACE}")
     time.sleep(0.5)
     keyboard.send_keys("On-Demand Data", with_spaces=True)
-    time.sleep(1.5)
+    time.sleep(2.0)
     keyboard.send_keys("{ENTER}")
     print("Waiting for On-Demand Data tab to open...")
-    time.sleep(7.0)
+    time.sleep(10.0)
 
 
 def select_document(info: WindowInfo, document_name: str) -> None:
