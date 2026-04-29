@@ -648,6 +648,30 @@ def click_scaled(
     time.sleep(0.2)
 
 
+def is_left_menu_open(info: WindowInfo) -> bool:
+    try:
+        from PIL import ImageGrab
+
+        x, y = rel_point(info, 94, 92)
+        pixel = ImageGrab.grab(bbox=(x, y, x + 1, y + 1)).getpixel((0, 0))
+        red, green, blue = pixel[:3]
+        return blue > 90 and red < 130 and green < 140
+    except Exception:
+        return False
+
+
+def looks_like_on_demand_screen(info: WindowInfo) -> bool:
+    try:
+        from PIL import ImageGrab
+
+        x, y = rel_point(info, 1190, 138)
+        pixel = ImageGrab.grab(bbox=(x, y, x + 1, y + 1)).getpixel((0, 0))
+        red, green, blue = pixel[:3]
+        return blue > 120 and red < 110 and green < 170
+    except Exception:
+        return False
+
+
 def paste_text(value: str, *, clear: bool = True) -> None:
     import pyperclip
     from pywinauto import keyboard
@@ -828,59 +852,41 @@ def ensure_main_window(args: argparse.Namespace) -> WindowInfo:
 
 
 def open_on_demand_data(info: WindowInfo) -> None:
-    from pywinauto import keyboard
     bring_to_front(info)
     time.sleep(2.0)
+
+    if looks_like_on_demand_screen(info):
+        print("On-Demand Data tab is already open.")
+        return
     
-    # 1. 상단 Document 메뉴 클릭 (1280x728 기준 x=450, y=55)
     print("Clicking Document menu tab...")
     click_rel(info, 450, 55)
-    time.sleep(3.0)
+    time.sleep(1.5)
     
-    # 2. On-Demand Data 메뉴 검색 (검색창 클릭 x=1015, y=55)
-    # 검색창을 확실히 활성화하기 위해 여러 번 클릭 시도
-    print("Searching for On-Demand Data in Search Menu...")
-    for _ in range(2):
-        click_rel(info, 1015, 55, double=True)
-        time.sleep(0.5)
-    
-    keyboard.send_keys("^a{BACKSPACE}")
-    time.sleep(0.5)
-    keyboard.send_keys("On-Demand Data", with_spaces=True)
-    time.sleep(2.0)
-    keyboard.send_keys("{ENTER}")
+    print("Opening On-Demand Data from My Menu...")
+    # The top Search Menu field no longer opens this screen reliably. The
+    # On-Demand Data shortcut is visible in MY MENU/Favorites after login.
+    if not is_left_menu_open(info):
+        click_rel(info, 21, 133)
+        time.sleep(1.0)
+    click_rel(info, 242, 92)
+    time.sleep(1.0)
+    click_rel(info, 86, 494, double=True)
+
     print("Waiting for On-Demand Data tab to open...")
     time.sleep(10.0)
 
 
 def select_document(info: WindowInfo, document_name: str) -> None:
     from pywinauto import keyboard
+
     bring_to_front(info)
     time.sleep(1.5)
-
-    # 텍스트 박스 먼저 더블 클릭하여 포커스 및 전체 선택
-    click_rel(info, 280, 187, double=True)
+    click_rel(info, 280, 138, double=True)
     time.sleep(1.0)
-    keyboard.send_keys("^a{BACKSPACE}")
-    time.sleep(1.0)
-    
-    # 드롭다운 화살표 클릭하여 리스트 활성화 시도
-    click_rel(info, 420, 187)
-    time.sleep(1.0)
-    
-    # 키워드 입력
-    search_keyword = "징수금액조회" if "징수금액" in document_name else document_name
-    keyboard.send_keys(search_keyword, with_spaces=True)
-    time.sleep(1.5)
-    
-    # 필터링 트리거 및 선택
-    keyboard.send_keys("{SPACE}{BACKSPACE}")
-    time.sleep(3.0)
-    keyboard.send_keys("{DOWN}{ENTER}")
-    time.sleep(2.0)
+    paste_text(document_name)
     keyboard.send_keys("{TAB}")
     time.sleep(3.0)
-
 
 def set_condition_value(info: WindowInfo, rel_x: int, rel_y: int, value: str) -> None:
     from pywinauto import keyboard
@@ -893,10 +899,10 @@ def set_condition_value(info: WindowInfo, rel_x: int, rel_y: int, value: str) ->
 
 
 def set_conditions(info: WindowInfo, window: object, org: str, division: str) -> None:
-    set_condition_value(info, 205, 235, f"{window.start_year}{window.start_week:02d}")
-    set_condition_value(info, 205, 259, f"{window.end_year}{window.end_week:02d}")
-    set_condition_value(info, 205, 283, org)
-    set_condition_value(info, 205, 307, division)
+    set_condition_value(info, 205, 184, f"{window.start_year}{window.start_week:02d}")
+    set_condition_value(info, 205, 208, f"{window.end_year}{window.end_week:02d}")
+    set_condition_value(info, 205, 232, org)
+    set_condition_value(info, 205, 256, division)
 
 
 def close_dynamiclist_workbooks() -> None:
@@ -1013,7 +1019,7 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
     wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_conditions_wait", raise_on_timeout=False)
 
     close_dynamiclist_workbooks()
-    click_rel(info, 930, 187)
+    click_rel(info, 1190, 138)
     print(f"Search clicked. Waiting {args.search_wait} seconds for ICC results.")
     sleep_with_xplatform_checks(args.search_wait, Path(args.output_dir), "xplatform_search_wait")
     wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_search_busy_wait", raise_on_timeout=False)
@@ -1024,7 +1030,7 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
     for attempt in range(1, args.export_attempts + 1):
         close_dynamiclist_workbooks()
         info = ensure_main_window(args)  # 핸들이 무효화되었을 수 있으므로 갱신
-        click_rel(info, 865, 101)
+        click_rel(info, 1110, 101)
         suffix = "" if args.export_attempts == 1 else f" (attempt {attempt}/{args.export_attempts})"
         print(f"Excel Down clicked. Waiting for DynamicList.CSV in Excel{suffix}.")
         try:
@@ -1049,7 +1055,7 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
                 "xplatform_export_retry_wait",
             )
             info = ensure_main_window(args)
-            click_rel(info, 930, 187)
+            click_rel(info, 1190, 138)
             print(f"Search clicked. Waiting {args.search_wait} seconds for ICC results.")
             sleep_with_xplatform_checks(args.search_wait, Path(args.output_dir), "xplatform_search_retry_wait")
             wait_for_blank_modals_to_clear(30, Path(args.output_dir), "xplatform_search_retry_busy_wait")
