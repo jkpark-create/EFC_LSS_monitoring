@@ -6,6 +6,7 @@ import json
 import os
 import re
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 
 
@@ -62,6 +63,23 @@ def normalize_salesperson(value: object) -> str:
     return ", ".join(names)
 
 
+def normalize_shipper_rows(value: object) -> tuple[Iterable[dict], int]:
+    if isinstance(value, list):
+        return (row for row in value if isinstance(row, dict)), len(value)
+
+    if isinstance(value, dict):
+        columns = value.get("c")
+        rows = value.get("r")
+        if isinstance(columns, list) and isinstance(rows, list):
+            return (
+                dict(zip(columns, row))
+                for row in rows
+                if isinstance(row, list)
+            ), len(rows)
+
+    raise ValueError("Unsupported shipper data format in sales source JSON")
+
+
 def load_salesperson_lookup() -> tuple[dict[str, str], dict]:
     meta = {
         "source": str(SALES_SOURCE_JSON),
@@ -74,8 +92,8 @@ def load_salesperson_lookup() -> tuple[dict[str, str], dict]:
         return {}, meta
 
     payload = json.loads(SALES_SOURCE_JSON.read_text(encoding="utf-8"))
-    shipper_rows = payload.get("shipper", [])
-    meta["sourceRows"] = len(shipper_rows)
+    shipper_rows, source_rows = normalize_shipper_rows(payload.get("shipper", []))
+    meta["sourceRows"] = source_rows
 
     weighted: dict[str, Counter] = {}
     for row in shipper_rows:
