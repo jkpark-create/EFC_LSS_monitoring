@@ -29,6 +29,9 @@ FATAL_DIALOG_TITLE_TOKENS = (
 BUSY_MODAL_AREA_RANGE = (10_000, 120_000)
 BUSY_MODAL_HEIGHT_RANGE = (60, 150)
 BUSY_MODAL_ASPECT_RATIO_MIN = 2.5
+MESSAGE_MODAL_WIDTH_RANGE = (150, 500)
+MESSAGE_MODAL_HEIGHT_RANGE = (100, 300)
+MESSAGE_MODAL_ASPECT_RATIO_MAX = 2.4
 
 
 @dataclass(frozen=True)
@@ -273,6 +276,51 @@ def visible_blank_modal_windows(windows: list[WindowInfo] | None = None) -> list
     return modals
 
 
+def visible_message_modal_windows(windows: list[WindowInfo] | None = None) -> list[WindowInfo]:
+    modals: list[WindowInfo] = []
+    source = windows if windows is not None else collect_windows()
+    main_handles = {info.handle for info in source if info.title.startswith("KMTC :: ICC")}
+    for info in source:
+        if info.handle in main_handles:
+            continue
+        if info.class_name != "CyWindowClass" or info.title:
+            continue
+        bounds = window_bounds_from_rectangle(info.rectangle)
+        if bounds is None:
+            continue
+        left, top, right, bottom = bounds
+        width = max(0, right - left)
+        height = max(0, bottom - top)
+        if height <= 0:
+            continue
+        aspect_ratio = width / height
+        if (
+            MESSAGE_MODAL_WIDTH_RANGE[0] <= width <= MESSAGE_MODAL_WIDTH_RANGE[1]
+            and MESSAGE_MODAL_HEIGHT_RANGE[0] <= height <= MESSAGE_MODAL_HEIGHT_RANGE[1]
+            and aspect_ratio <= MESSAGE_MODAL_ASPECT_RATIO_MAX
+        ):
+            modals.append(info)
+    return modals
+
+
+def dismiss_message_modals(windows: list[WindowInfo] | None = None) -> bool:
+    dialogs = visible_message_modal_windows(windows)
+    if not dialogs:
+        return False
+
+    from pywinauto import keyboard
+
+    for dialog in dialogs:
+        try:
+            bring_to_front(dialog)
+            keyboard.send_keys("{ENTER}")
+            time.sleep(0.5)
+            print(f"Dismissed XPlatform message dialog handle={dialog.handle}.")
+        except Exception as exc:
+            print(f"Could not dismiss XPlatform message dialog {dialog.handle}: {exc}", file=sys.stderr)
+    return True
+
+
 def dismiss_fatal_error_dialogs(windows: list[WindowInfo] | None = None) -> bool:
     dialogs = fatal_error_windows(windows)
     if not dialogs:
@@ -433,14 +481,23 @@ def capture_diagnostic_windows(output_dir: Path, prefix: str) -> list[Path]:
 
 
 def main_window(windows: list[WindowInfo] | None = None) -> WindowInfo | None:
+    source = windows if windows is not None else collect_windows()
     candidates = [
         info
-        for info in (windows if windows is not None else collect_windows())
+        for info in source
         if info.title.startswith("KMTC :: ICC") and visible_area(info) > 0
     ]
-    if not candidates:
-        return None
-    return max(candidates, key=visible_area)
+    if candidates:
+        return max(candidates, key=visible_area)
+
+    candidates = [
+        info
+        for info in source
+        if info.class_name == "CyWindowClass" and visible_area(info) > 300_000
+    ]
+    if candidates:
+        return max(candidates, key=visible_area)
+    return None
 
 
 def login_window(windows: list[WindowInfo] | None = None) -> WindowInfo | None:
@@ -664,10 +721,26 @@ def looks_like_on_demand_screen(info: WindowInfo) -> bool:
     try:
         from PIL import ImageGrab
 
-        x, y = rel_point(info, 1190, 138)
-        pixel = ImageGrab.grab(bbox=(x, y, x + 1, y + 1)).getpixel((0, 0))
-        red, green, blue = pixel[:3]
-        return blue > 120 and red < 110 and green < 170
+        checks = []
+        for rel_x, rel_y in (
+            (38, 101),    # On-Demand Data title icon.
+            (1160, 138),  # Search button background.
+            (1210, 138),  # Search button background.
+            (99, 710),    # Active On-Demand Data tab.
+        ):
+            x, y = rel_point(info, rel_x, rel_y)
+            pixel = ImageGrab.grab(bbox=(x, y, x + 1, y + 1)).getpixel((0, 0))
+            checks.append(pixel[:3])
+
+        title_icon = checks[0]
+        search_button = checks[1:3]
+        active_tab = checks[3]
+        if title_icon[2] > 150 and title_icon[0] < 100 and title_icon[1] < 160:
+            return True
+        if any(blue > 150 and red < 120 and green < 160 for red, green, blue in search_button):
+            return True
+        red, green, blue = active_tab
+        return red > 200 and 50 <= green <= 140 and blue < 100
     except Exception:
         return False
 
@@ -854,6 +927,7 @@ def ensure_main_window(args: argparse.Namespace) -> WindowInfo:
 def open_on_demand_data(info: WindowInfo) -> None:
     bring_to_front(info)
     time.sleep(2.0)
+    dismiss_message_modals()
 
     if looks_like_on_demand_screen(info):
         print("On-Demand Data tab is already open.")
@@ -871,10 +945,21 @@ def open_on_demand_data(info: WindowInfo) -> None:
         time.sleep(1.0)
     click_rel(info, 242, 92)
     time.sleep(1.0)
-    click_rel(info, 86, 494, double=True)
+    # On-Demand Data is the row above Portwise Stock Control in the Favorites list.
+    click_rel(info, 86, 469, double=True)
 
     print("Waiting for On-Demand Data tab to open...")
-    time.sleep(10.0)
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        dismiss_message_modals()
+        if looks_like_on_demand_screen(info):
+            return
+        time.sleep(1.0)
+
+    captures = capture_diagnostic_windows(DEFAULT_LOG_DIR, "xplatform_open_on_demand_fail")
+    for capture in captures:
+        print(f"Diagnostic screenshot: {capture.resolve()}")
+    raise RuntimeError("Timed out opening On-Demand Data from the ICC Favorites menu.")
 
 
 def select_document(info: WindowInfo, document_name: str) -> None:
