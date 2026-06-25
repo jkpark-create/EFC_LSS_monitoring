@@ -558,7 +558,7 @@ HTML = r"""<!doctype html>
     }
 
     .toolbar {
-      grid-template-columns: repeat(12, minmax(0, 1fr));
+      grid-template-columns: repeat(14, minmax(0, 1fr));
       align-items: end;
       margin-bottom: 14px;
     }
@@ -570,6 +570,7 @@ HTML = r"""<!doctype html>
     .control.small { grid-column: span 1; }
     .control.medium { grid-column: span 2; }
     .control.large { grid-column: span 3; }
+    .control.xlarge { grid-column: span 5; }
     .control.layer-control { grid-column: span 3; }
 
     label {
@@ -953,6 +954,7 @@ HTML = r"""<!doctype html>
     @media (max-width: 1180px) {
       .toolbar { grid-template-columns: repeat(6, minmax(0, 1fr)); }
       .control.small, .control.medium, .control.large { grid-column: span 2; }
+      .control.xlarge { grid-column: span 6; }
       .control.layer-control { grid-column: span 3; }
       .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .grid { grid-template-columns: 1fr; }
@@ -963,7 +965,7 @@ HTML = r"""<!doctype html>
       .header-top { align-items: flex-start; flex-direction: column; }
       main { padding: 14px 12px 22px; }
       .toolbar { grid-template-columns: 1fr; }
-      .control.small, .control.medium, .control.large { grid-column: span 1; }
+      .control.small, .control.medium, .control.large, .control.xlarge { grid-column: span 1; }
       .control.layer-control { grid-column: span 1; }
       .kpis { grid-template-columns: 1fr; }
       .metric .value { font-size: 22px; }
@@ -1031,10 +1033,17 @@ HTML = r"""<!doctype html>
         </div>
       </div>
       <div class="control medium">
-        <label>Origin</label>
+        <label>선적지 기준</label>
         <div class="segmented" data-segment="originBasis">
           <button data-value="originPort">POL</button>
           <button data-value="originCountry" class="active">국가</button>
+        </div>
+      </div>
+      <div class="control medium">
+        <label>도착지 기준</label>
+        <div class="segmented" data-segment="destinationBasis">
+          <button data-value="destinationPort" class="active">POD</button>
+          <button data-value="destinationCountry">국가</button>
         </div>
       </div>
       <div class="control medium">
@@ -1072,7 +1081,7 @@ HTML = r"""<!doctype html>
         <label>도착지</label>
         <select id="destinationFilter"></select>
       </div>
-      <div class="control large">
+      <div class="control xlarge">
         <label>Search</label>
         <input id="searchFilter" type="search" placeholder="BL / 고객 / Port / Route">
       </div>
@@ -1216,14 +1225,14 @@ HTML = r"""<!doctype html>
           return `${updatedText}${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows${sales}`;
         },
         filters: {
-          charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
+          charge: "Charge", layer: "Layer", originBasis: "선적지 기준", destinationBasis: "도착지 기준", customer: "Customer", month: "Month",
           week: "Week", pc: "P/C", status: "Status", salesperson: "영업사원", originSelect: "선적지", destination: "도착지", search: "Search",
         },
         buttons: {
           all: "전체", origin: "선적지", lane: "Lane", customer: "고객", salesperson: "영업사원", country: "국가",
           shipper: "Shipper", cnee: "CNEE", gap: "Gap", tariff: "Tariff", rate: "징수율",
         },
-        searchPlaceholder: "BL / 고객 / 영업사원 / Port / Route",
+        searchPlaceholder: "BL / 고객 / 영업사원 / 국가 / Port / Route",
         kpis: {
           rate: "징수율", expected: "Tariff 기대액", actual: "실제 징수액", gap: "Gap", bl: "대상 BL", teu: "TEU",
           underCollected: count => `${num(count)} under-collected rows`,
@@ -1282,14 +1291,14 @@ HTML = r"""<!doctype html>
           return `${updatedText}${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped${sales}`;
         },
         filters: {
-          charge: "Charge", layer: "Layer", origin: "Origin", customer: "Customer", month: "Month",
+          charge: "Charge", layer: "Layer", originBasis: "Origin Basis", destinationBasis: "Destination Basis", customer: "Customer", month: "Month",
           week: "Week", pc: "P/C", status: "Status", salesperson: "Salesperson", originSelect: "Origin", destination: "Destination", search: "Search",
         },
         buttons: {
           all: "All", origin: "Origin", lane: "Lane", customer: "Customer", salesperson: "Sales", country: "Country",
           shipper: "Shipper", cnee: "CNEE", gap: "Gap", tariff: "Tariff", rate: "Rate",
         },
-        searchPlaceholder: "BL / customer / salesperson / port / route",
+        searchPlaceholder: "BL / customer / salesperson / country / port / route",
         kpis: {
           rate: "Collection Rate", expected: "Tariff Expected", actual: "Actual Collection", gap: "Gap", bl: "Target BL", teu: "TEU",
           underCollected: count => `${num(count)} under-collected rows`,
@@ -1329,6 +1338,7 @@ HTML = r"""<!doctype html>
       program: "ALL",
       level: "origin",
       originBasis: "originCountry",
+      destinationBasis: "destinationPort",
       customerBasis: "bookingShipper",
       sortMetric: "gap",
       month: "ALL",
@@ -1414,7 +1424,12 @@ HTML = r"""<!doctype html>
     }
 
     function destinationLabel(row) {
+      if (state.destinationBasis === "destinationCountry") return safe(row.destinationCountry);
       return `${safe(row.destinationPort)} (${safe(row.destinationCountry)})`;
+    }
+
+    function destinationValue(row) {
+      return state.destinationBasis === "destinationCountry" ? row.destinationCountry : row.destinationPort;
     }
 
     function customerValue(row) {
@@ -1446,9 +1461,9 @@ HTML = r"""<!doctype html>
         if (state.status !== "ALL" && row.status !== state.status) return false;
         if (state.salesperson !== "ALL" && salespersonValue(row) !== state.salesperson) return false;
         if (state.origin !== "ALL" && originValue(row) !== state.origin) return false;
-        if (state.destination !== "ALL" && row.destinationPort !== state.destination) return false;
+        if (state.destination !== "ALL" && destinationValue(row) !== state.destination) return false;
         if (state.selectedOrigin && originValue(row) !== state.selectedOrigin) return false;
-        if (state.selectedDestination && row.destinationPort !== state.selectedDestination) return false;
+        if (state.selectedDestination && destinationValue(row) !== state.selectedDestination) return false;
         return matchesSearch(row, term);
       });
     }
@@ -1535,7 +1550,7 @@ HTML = r"""<!doctype html>
         label: row => originLabel(row),
       };
       const destination = {
-        value: row => row.destinationPort,
+        value: row => destinationValue(row),
         label: row => destinationLabel(row),
       };
       const customer = {
@@ -1632,9 +1647,10 @@ HTML = r"""<!doctype html>
 
       const filterLabels = document.querySelectorAll(".toolbar .control > label");
       [
-        ui.filters.charge, ui.filters.layer, ui.filters.origin, ui.filters.customer,
-        ui.filters.month, ui.filters.week, ui.filters.pc, ui.filters.status,
-        ui.filters.salesperson, ui.filters.originSelect, ui.filters.destination, ui.filters.search,
+        ui.filters.charge, ui.filters.layer, ui.filters.originBasis, ui.filters.destinationBasis,
+        ui.filters.customer, ui.filters.month, ui.filters.week, ui.filters.pc,
+        ui.filters.status, ui.filters.salesperson, ui.filters.originSelect, ui.filters.destination,
+        ui.filters.search,
       ].forEach((label, index) => {
         if (filterLabels[index]) filterLabels[index].textContent = label;
       });
@@ -1643,6 +1659,7 @@ HTML = r"""<!doctype html>
         program: { ALL: ui.buttons.all, "EFC non-CN": "EFC", "LSS CN→JP": "LSS" },
         level: { origin: ui.buttons.origin, lane: ui.buttons.lane, customer: ui.buttons.customer, salesperson: ui.buttons.salesperson },
         originBasis: { originPort: "POL", originCountry: ui.buttons.country },
+        destinationBasis: { destinationPort: "POD", destinationCountry: ui.buttons.country },
         customerBasis: { bookingShipper: ui.buttons.shipper, handlingConsignee: ui.buttons.cnee },
         sortMetric: { gap: ui.buttons.gap, expected: ui.buttons.tariff, rate: ui.buttons.rate },
       };
@@ -1814,10 +1831,13 @@ HTML = r"""<!doctype html>
 
     function updateOriginDestinationFilters() {
       const base = rows.filter(row => state.program === "ALL" || row.program === state.program);
-      state.origin = fillSelect("originFilter", base.map(originValue), state.origin);
-      state.destination = fillSelect("destinationFilter", base.map(r => r.destinationPort), state.destination, value => {
-        const found = base.find(r => r.destinationPort === value);
-        return found ? `${value} (${found.destinationCountry})` : value;
+      state.origin = fillSelect("originFilter", base.map(originValue), state.origin, value => {
+        const found = base.find(row => originValue(row) === value);
+        return found ? originLabel(found) : value;
+      });
+      state.destination = fillSelect("destinationFilter", base.map(destinationValue), state.destination, value => {
+        const found = base.find(row => destinationValue(row) === value);
+        return found ? destinationLabel(found) : value;
       });
     }
 
@@ -2115,6 +2135,10 @@ HTML = r"""<!doctype html>
         if (key === "originBasis") {
           state.origin = "ALL";
           state.selectedOrigin = "";
+          state.selectedDestination = "";
+        }
+        if (key === "destinationBasis") {
+          state.destination = "ALL";
           state.selectedDestination = "";
         }
         if (key === "program") {
