@@ -28,7 +28,7 @@ python3 build_dashboard.py
 
 ## ICC 매일 갱신
 
-ICC `On-Demand Data`에서 엑셀을 내려받아 `DynamicList.CSV`를 교체하고 대시보드를 다시 생성하는 자동화는 `icc_daily_update.py`로 실행합니다.
+ICC `On-Demand Data`에서 엑셀을 내려받아 `DynamicList.CSV`에 주차별로 누적 반영하고 대시보드를 다시 생성하는 자동화는 `icc_daily_update.py`로 실행합니다. 기본 동작은 새 다운로드 파일에 포함된 `실적년 + 실적년주차`만 최신 데이터로 교체하고, 기존 파일에 있던 다른 주차는 유지합니다.
 
 최초 1회만 Playwright를 설치합니다.
 
@@ -56,6 +56,8 @@ ICC 화면을 열어 다운로드까지 실행하려면 사내 ICC URL을 넘겨
 ```powershell
 .\run_icc_daily_update.ps1 -DownloadFile ".\downloads\DynamicList.xlsx"
 ```
+
+전체 `DynamicList.CSV`를 의도적으로 교체해야 하는 예외 상황에서만 `py .\icc_daily_update.py --download-file ".\downloads\DynamicList.xlsx" --replace`를 사용합니다. 일반 일일 갱신과 스케줄러 실행에는 `--replace`를 쓰지 않습니다.
 
 조건 계산만 확인할 때는 다음 명령을 사용합니다.
 
