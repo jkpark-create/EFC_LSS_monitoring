@@ -24,6 +24,7 @@ DEFAULT_BROWSER_PROFILE = Path(".icc-browser")
 REPORT_WINDOW_WEEKS = 4
 CSV_OUTPUT_ENCODING = "cp949"
 CSV_REQUIRED_HEADERS = ("실적년", "실적월", "실적년주차")
+CSV_PERIOD_HEADERS = ("실적년", "실적년주차")
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,15 @@ class ReportWindow:
             f"시작년주 {self.start_year}{self.start_week:02d}, "
             f"종료년주 {self.end_year}{self.end_week:02d}"
         )
+
+
+@dataclass(frozen=True)
+class CsvMergeResult:
+    existing_rows: int
+    downloaded_rows: int
+    retained_rows: int
+    replaced_periods: int
+    output_rows: int
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -159,11 +169,98 @@ def write_rows_to_csv(rows: list[list[str]], output_csv: Path) -> None:
         writer.writerows(rows)
 
 
-def normalize_csv_file(source: Path, output_csv: Path) -> None:
+def read_csv_table(source: Path) -> list[list[str]]:
     encoding = detect_text_encoding(source)
-    with source.open("r", encoding=encoding, newline="") as src:
-        rows = list(csv.reader(src))
-    write_rows_to_csv(rows, output_csv)
+    with source.open("r", encoding=encoding, newline="") as f:
+        return list(csv.reader(f))
+
+
+def normalize_csv_file(source: Path, output_csv: Path) -> None:
+    write_rows_to_csv(read_csv_table(source), output_csv)
+
+
+def normalized_period_part(value: str, width: int = 0) -> str:
+    text = normalize_text(value).replace(",", "")
+    if not text:
+        return ""
+    try:
+        number = int(float(text))
+    except ValueError:
+        return text
+    if width:
+        return f"{number:0{width}d}"
+    return str(number)
+
+
+def period_indexes(header: list[str]) -> tuple[int, int]:
+    try:
+        return header.index(CSV_PERIOD_HEADERS[0]), header.index(CSV_PERIOD_HEADERS[1])
+    except ValueError as exc:
+        raise ValueError(f"CSV is missing required period headers: {CSV_PERIOD_HEADERS}") from exc
+
+
+def row_period(row: list[str], year_index: int, week_index: int) -> tuple[str, str] | None:
+    year = row[year_index] if year_index < len(row) else ""
+    week = row[week_index] if week_index < len(row) else ""
+    year_key = normalized_period_part(year, 4)
+    week_key = normalized_period_part(week, 2)
+    if not year_key or not week_key:
+        return None
+    return year_key, week_key
+
+
+def data_rows_by_period(rows: list[list[str]], year_index: int, week_index: int) -> list[tuple[tuple[str, str], list[str]]]:
+    period_rows: list[tuple[tuple[str, str], list[str]]] = []
+    for row in rows:
+        period = row_period(row, year_index, week_index)
+        if period is not None:
+            period_rows.append((period, row))
+    return period_rows
+
+
+def merge_csv_files(existing_csv: Path, downloaded_csv: Path, output_csv: Path) -> CsvMergeResult:
+    downloaded_table = read_csv_table(downloaded_csv)
+    if not downloaded_table:
+        raise ValueError(f"Downloaded CSV has no rows: {downloaded_csv}")
+
+    downloaded_header = downloaded_table[0]
+    downloaded_data = downloaded_table[1:]
+    downloaded_year_index, downloaded_week_index = period_indexes(downloaded_header)
+    downloaded_period_rows = data_rows_by_period(downloaded_data, downloaded_year_index, downloaded_week_index)
+    if not downloaded_period_rows:
+        raise ValueError(f"Downloaded CSV has no data rows with year/week values: {downloaded_csv}")
+
+    periods_to_replace = {period for period, _row in downloaded_period_rows}
+    retained_rows: list[list[str]] = []
+    existing_data_count = 0
+
+    if existing_csv.exists():
+        existing_table = read_csv_table(existing_csv)
+        if existing_table:
+            existing_header = existing_table[0]
+            if existing_header != downloaded_header:
+                raise ValueError(
+                    "Existing CSV header differs from downloaded CSV header; "
+                    "rerun with --replace if a schema change is intended."
+                )
+            existing_year_index, existing_week_index = period_indexes(existing_header)
+            existing_period_rows = data_rows_by_period(existing_table[1:], existing_year_index, existing_week_index)
+            existing_data_count = len(existing_period_rows)
+            retained_rows = [
+                row
+                for period, row in existing_period_rows
+                if period not in periods_to_replace
+            ]
+
+    merged_rows = retained_rows + [row for _period, row in downloaded_period_rows]
+    write_rows_to_csv([downloaded_header, *merged_rows], output_csv)
+    return CsvMergeResult(
+        existing_rows=existing_data_count,
+        downloaded_rows=len(downloaded_period_rows),
+        retained_rows=len(retained_rows),
+        replaced_periods=len(periods_to_replace),
+        output_rows=len(merged_rows),
+    )
 
 
 def xml_name(name: str) -> str:
@@ -672,6 +769,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=int(os.getenv("ICC_TIMEOUT_SECONDS", "90")))
     parser.add_argument("--slow-mo", type=int, default=int(os.getenv("ICC_SLOW_MO_MS", "0")))
     parser.add_argument("--headless", action="store_true", default=env_bool("ICC_HEADLESS", False))
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        default=env_bool("ICC_REPLACE_CSV", False),
+        help="Replace DynamicList.CSV instead of accumulating previous year-week rows.",
+    )
     parser.add_argument("--no-build", action="store_true", help="Do not rebuild index.html after CSV update.")
     parser.add_argument("--dry-run", action="store_true", help="Print the computed ICC conditions only.")
     return parser.parse_args()
@@ -708,8 +811,25 @@ def main() -> None:
         shutil.copy2(output_csv, backup_path)
         print(f"Backed up previous CSV: {backup_path}")
 
-    convert_download_to_csv(downloaded_file, output_csv)
-    print(f"Updated source CSV: {output_csv}")
+    temp_csv = output_csv.with_name(f"{output_csv.stem}.download.tmp{output_csv.suffix}")
+    try:
+        convert_download_to_csv(downloaded_file, temp_csv)
+        if args.replace:
+            shutil.move(str(temp_csv), str(output_csv))
+            print(f"Replaced source CSV: {output_csv}")
+        else:
+            merge_result = merge_csv_files(output_csv, temp_csv, output_csv)
+            print(
+                "Accumulated source CSV: "
+                f"{output_csv} "
+                f"(kept {merge_result.retained_rows:,} old rows, "
+                f"replaced {merge_result.replaced_periods:,} periods with "
+                f"{merge_result.downloaded_rows:,} downloaded rows, "
+                f"output {merge_result.output_rows:,} rows)"
+            )
+    finally:
+        if temp_csv.exists():
+            temp_csv.unlink()
 
     if not args.no_build:
         run_dashboard_build()
