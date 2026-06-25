@@ -558,7 +558,7 @@ HTML = r"""<!doctype html>
     }
 
     .toolbar {
-      grid-template-columns: repeat(14, minmax(0, 1fr));
+      grid-template-columns: repeat(16, minmax(0, 1fr));
       align-items: end;
       margin-bottom: 14px;
     }
@@ -1073,13 +1073,21 @@ HTML = r"""<!doctype html>
         <label>Salesperson</label>
         <select id="salespersonFilter"></select>
       </div>
-      <div class="control medium">
-        <label>선적지</label>
-        <select id="originFilter"></select>
+      <div class="control small">
+        <label>선적 국가</label>
+        <select id="originCountryFilter"></select>
       </div>
       <div class="control medium">
-        <label>도착지</label>
-        <select id="destinationFilter"></select>
+        <label>선적 포트</label>
+        <select id="originPortFilter"></select>
+      </div>
+      <div class="control small">
+        <label>도착 국가</label>
+        <select id="destinationCountryFilter"></select>
+      </div>
+      <div class="control medium">
+        <label>도착 포트</label>
+        <select id="destinationPortFilter"></select>
       </div>
       <div class="control xlarge">
         <label>Search</label>
@@ -1226,7 +1234,8 @@ HTML = r"""<!doctype html>
         },
         filters: {
           charge: "Charge", layer: "Layer", originBasis: "선적지 기준", destinationBasis: "도착지 기준", customer: "Customer", month: "Month",
-          week: "Week", pc: "P/C", status: "Status", salesperson: "영업사원", originSelect: "선적지", destination: "도착지", search: "Search",
+          week: "Week", pc: "P/C", status: "Status", salesperson: "영업사원", originSelect: "선적지", destination: "도착지",
+          originCountry: "선적 국가", originPort: "선적 포트", destinationCountry: "도착 국가", destinationPort: "도착 포트", search: "Search",
         },
         buttons: {
           all: "전체", origin: "선적지", lane: "Lane", customer: "고객", salesperson: "영업사원", country: "국가",
@@ -1292,7 +1301,8 @@ HTML = r"""<!doctype html>
         },
         filters: {
           charge: "Charge", layer: "Layer", originBasis: "Origin Basis", destinationBasis: "Destination Basis", customer: "Customer", month: "Month",
-          week: "Week", pc: "P/C", status: "Status", salesperson: "Salesperson", originSelect: "Origin", destination: "Destination", search: "Search",
+          week: "Week", pc: "P/C", status: "Status", salesperson: "Salesperson", originSelect: "Origin", destination: "Destination",
+          originCountry: "Origin Country", originPort: "Origin Port", destinationCountry: "Destination Country", destinationPort: "Destination Port", search: "Search",
         },
         buttons: {
           all: "All", origin: "Origin", lane: "Lane", customer: "Customer", salesperson: "Sales", country: "Country",
@@ -1346,8 +1356,10 @@ HTML = r"""<!doctype html>
       pc: "ALL",
       status: "ALL",
       salesperson: "ALL",
-      origin: "ALL",
-      destination: "ALL",
+      originCountry: "ALL",
+      originPort: "ALL",
+      destinationCountry: "ALL",
+      destinationPort: "ALL",
       search: "",
       selectedOrigin: "",
       selectedDestination: "",
@@ -1432,6 +1444,10 @@ HTML = r"""<!doctype html>
       return state.destinationBasis === "destinationCountry" ? row.destinationCountry : row.destinationPort;
     }
 
+    function portLabel(port, country) {
+      return port ? `${safe(port)} (${safe(country)})` : safe(port);
+    }
+
     function customerValue(row) {
       const value = row[state.customerBasis];
       return safe(value, t().unassigned);
@@ -1451,17 +1467,29 @@ HTML = r"""<!doctype html>
       return text.includes(term);
     }
 
+    function matchesBaseFilters(row) {
+      if (state.program !== "ALL" && row.program !== state.program) return false;
+      if (state.month !== "ALL" && row.yearMonth !== state.month) return false;
+      if (state.week !== "ALL" && row.week !== state.week) return false;
+      if (state.pc !== "ALL" && row.pc !== state.pc) return false;
+      if (state.status !== "ALL" && row.status !== state.status) return false;
+      if (state.salesperson !== "ALL" && salespersonValue(row) !== state.salesperson) return false;
+      return true;
+    }
+
+    function matchesLocationFilters(row, except = "") {
+      if (except !== "originCountry" && state.originCountry !== "ALL" && row.originCountry !== state.originCountry) return false;
+      if (except !== "originPort" && state.originPort !== "ALL" && row.originPort !== state.originPort) return false;
+      if (except !== "destinationCountry" && state.destinationCountry !== "ALL" && row.destinationCountry !== state.destinationCountry) return false;
+      if (except !== "destinationPort" && state.destinationPort !== "ALL" && row.destinationPort !== state.destinationPort) return false;
+      return true;
+    }
+
     function filteredRows() {
       const term = state.search.trim().toLowerCase();
       return rows.filter(row => {
-        if (state.program !== "ALL" && row.program !== state.program) return false;
-        if (state.month !== "ALL" && row.yearMonth !== state.month) return false;
-        if (state.week !== "ALL" && row.week !== state.week) return false;
-        if (state.pc !== "ALL" && row.pc !== state.pc) return false;
-        if (state.status !== "ALL" && row.status !== state.status) return false;
-        if (state.salesperson !== "ALL" && salespersonValue(row) !== state.salesperson) return false;
-        if (state.origin !== "ALL" && originValue(row) !== state.origin) return false;
-        if (state.destination !== "ALL" && destinationValue(row) !== state.destination) return false;
+        if (!matchesBaseFilters(row)) return false;
+        if (!matchesLocationFilters(row)) return false;
         if (state.selectedOrigin && originValue(row) !== state.selectedOrigin) return false;
         if (state.selectedDestination && destinationValue(row) !== state.selectedDestination) return false;
         return matchesSearch(row, term);
@@ -1649,7 +1677,8 @@ HTML = r"""<!doctype html>
       [
         ui.filters.charge, ui.filters.layer, ui.filters.originBasis, ui.filters.destinationBasis,
         ui.filters.customer, ui.filters.month, ui.filters.week, ui.filters.pc,
-        ui.filters.status, ui.filters.salesperson, ui.filters.originSelect, ui.filters.destination,
+        ui.filters.status, ui.filters.salesperson, ui.filters.originCountry, ui.filters.originPort,
+        ui.filters.destinationCountry, ui.filters.destinationPort,
         ui.filters.search,
       ].forEach((label, index) => {
         if (filterLabels[index]) filterLabels[index].textContent = label;
@@ -1826,19 +1855,41 @@ HTML = r"""<!doctype html>
       fillSelect("pcFilter", rows.map(r => r.pc), state.pc);
       fillSelect("statusFilter", ["정상", "부분징수", "미징수", "초과징수", "수량확인", "수량없음"], state.status, statusText);
       fillSelect("salespersonFilter", rows.map(salespersonValue), state.salesperson);
-      updateOriginDestinationFilters();
+      updateLocationFilters();
     }
 
-    function updateOriginDestinationFilters() {
-      const base = rows.filter(row => state.program === "ALL" || row.program === state.program);
-      state.origin = fillSelect("originFilter", base.map(originValue), state.origin, value => {
-        const found = base.find(row => originValue(row) === value);
-        return found ? originLabel(found) : value;
-      });
-      state.destination = fillSelect("destinationFilter", base.map(destinationValue), state.destination, value => {
-        const found = base.find(row => destinationValue(row) === value);
-        return found ? destinationLabel(found) : value;
-      });
+    function updateLocationFilters() {
+      const base = rows.filter(matchesBaseFilters);
+      const optionsFor = except => base.filter(row => matchesLocationFilters(row, except));
+
+      state.originCountry = fillSelect(
+        "originCountryFilter",
+        optionsFor("originCountry").map(row => row.originCountry),
+        state.originCountry,
+      );
+      state.originPort = fillSelect(
+        "originPortFilter",
+        optionsFor("originPort").map(row => row.originPort),
+        state.originPort,
+        value => {
+          const found = base.find(row => row.originPort === value);
+          return found ? portLabel(found.originPort, found.originCountry) : value;
+        },
+      );
+      state.destinationCountry = fillSelect(
+        "destinationCountryFilter",
+        optionsFor("destinationCountry").map(row => row.destinationCountry),
+        state.destinationCountry,
+      );
+      state.destinationPort = fillSelect(
+        "destinationPortFilter",
+        optionsFor("destinationPort").map(row => row.destinationPort),
+        state.destinationPort,
+        value => {
+          const found = base.find(row => row.destinationPort === value);
+          return found ? portLabel(found.destinationPort, found.destinationCountry) : value;
+        },
+      );
     }
 
     function renderKpis(sourceRows) {
@@ -2117,7 +2168,7 @@ HTML = r"""<!doctype html>
     }
 
     function render() {
-      updateOriginDestinationFilters();
+      updateLocationFilters();
       const sourceRows = filteredRows();
       renderKpis(sourceRows);
       renderBreadcrumb();
@@ -2133,17 +2184,17 @@ HTML = r"""<!doctype html>
         const key = group.dataset.segment;
         state[key] = button.dataset.value;
         if (key === "originBasis") {
-          state.origin = "ALL";
           state.selectedOrigin = "";
           state.selectedDestination = "";
         }
         if (key === "destinationBasis") {
-          state.destination = "ALL";
           state.selectedDestination = "";
         }
         if (key === "program") {
-          state.origin = "ALL";
-          state.destination = "ALL";
+          state.originCountry = "ALL";
+          state.originPort = "ALL";
+          state.destinationCountry = "ALL";
+          state.destinationPort = "ALL";
           state.salesperson = "ALL";
           state.selectedOrigin = "";
           state.selectedDestination = "";
@@ -2166,14 +2217,27 @@ HTML = r"""<!doctype html>
     document.getElementById("pcFilter").addEventListener("change", event => { state.pc = event.target.value; render(); });
     document.getElementById("statusFilter").addEventListener("change", event => { state.status = event.target.value; render(); });
     document.getElementById("salespersonFilter").addEventListener("change", event => { state.salesperson = event.target.value; render(); });
-    document.getElementById("originFilter").addEventListener("change", event => {
-      state.origin = event.target.value;
+    document.getElementById("originCountryFilter").addEventListener("change", event => {
+      state.originCountry = event.target.value;
+      state.originPort = "ALL";
       state.selectedOrigin = "";
       state.selectedDestination = "";
       render();
     });
-    document.getElementById("destinationFilter").addEventListener("change", event => {
-      state.destination = event.target.value;
+    document.getElementById("originPortFilter").addEventListener("change", event => {
+      state.originPort = event.target.value;
+      state.selectedOrigin = "";
+      state.selectedDestination = "";
+      render();
+    });
+    document.getElementById("destinationCountryFilter").addEventListener("change", event => {
+      state.destinationCountry = event.target.value;
+      state.destinationPort = "ALL";
+      state.selectedDestination = "";
+      render();
+    });
+    document.getElementById("destinationPortFilter").addEventListener("change", event => {
+      state.destinationPort = event.target.value;
       state.selectedDestination = "";
       render();
     });
