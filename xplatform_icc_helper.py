@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import getpass
+import os
 import shutil
 import subprocess
 import sys
@@ -32,6 +33,13 @@ BUSY_MODAL_ASPECT_RATIO_MIN = 2.5
 MESSAGE_MODAL_WIDTH_RANGE = (150, 500)
 MESSAGE_MODAL_HEIGHT_RANGE = (100, 300)
 MESSAGE_MODAL_ASPECT_RATIO_MAX = 2.4
+
+
+def env_int(name: str) -> int | None:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    return int(value)
 
 
 @dataclass(frozen=True)
@@ -984,10 +992,12 @@ def set_condition_value(info: WindowInfo, rel_x: int, rel_y: int, value: str) ->
 
 
 def set_conditions(info: WindowInfo, window: object, org: str, division: str) -> None:
-    set_condition_value(info, 205, 184, f"{window.start_year}{window.start_week:02d}")
-    set_condition_value(info, 205, 208, f"{window.end_year}{window.end_week:02d}")
+    # Organization/division can refresh dependent condition defaults, so set
+    # the year-week fields last.
     set_condition_value(info, 205, 232, org)
     set_condition_value(info, 205, 256, division)
+    set_condition_value(info, 205, 184, f"{window.start_year}{window.start_week:02d}")
+    set_condition_value(info, 205, 208, f"{window.end_year}{window.end_week:02d}")
 
 
 def close_dynamiclist_workbooks() -> None:
@@ -1083,6 +1093,9 @@ def run_xplatform_download(args: argparse.Namespace) -> Path:
         f"{window.start_year}{window.start_week:02d} -> {window.end_year}{window.end_week:02d}, "
         f"org {args.org}, division {args.division}"
     )
+
+    if args.dry_run:
+        return Path(args.output_file)
 
     recover_from_fatal_xplatform_error("xplatform_before_start_error", Path(args.output_dir))
     recover_from_stale_loading_modal("xplatform_before_start_busy", Path(args.output_dir))
@@ -1271,15 +1284,15 @@ def parse_args() -> argparse.Namespace:
     download.add_argument("--login-after-wait", type=int, default=20)
     download.add_argument("--login-auto-attempts", type=int, default=2)
     download.add_argument("--credential-target", default=CREDENTIAL_TARGET)
-    download.add_argument("--document-name", default=DEFAULT_DOCUMENT_NAME)
-    download.add_argument("--org", default="O")
-    download.add_argument("--division", default="D")
-    download.add_argument("--weeks", type=int, default=4)
-    download.add_argument("--date", help="Override run date as YYYY-MM-DD.")
-    download.add_argument("--target-year", type=int)
-    download.add_argument("--target-week", type=int)
-    download.add_argument("--start-year", type=int)
-    download.add_argument("--start-week", type=int)
+    download.add_argument("--document-name", default=os.getenv("ICC_DOCUMENT_NAME", DEFAULT_DOCUMENT_NAME))
+    download.add_argument("--org", default=os.getenv("ICC_ORG", "O"))
+    download.add_argument("--division", default=os.getenv("ICC_DIVISION", "D"))
+    download.add_argument("--weeks", type=int, default=int(os.getenv("ICC_WINDOW_WEEKS", "4")))
+    download.add_argument("--date", default=os.getenv("ICC_RUN_DATE"), help="Override run date as YYYY-MM-DD.")
+    download.add_argument("--target-year", type=int, default=env_int("ICC_TARGET_YEAR"))
+    download.add_argument("--target-week", type=int, default=env_int("ICC_TARGET_WEEK"))
+    download.add_argument("--start-year", type=int, default=env_int("ICC_START_YEAR"))
+    download.add_argument("--start-week", type=int, default=env_int("ICC_START_WEEK"))
     download.add_argument(
         "--output-file",
         default=str(DEFAULT_DOWNLOAD_DIR / f"xplatform_DynamicList_{dt.datetime.now():%Y%m%d_%H%M%S}.csv"),
@@ -1292,6 +1305,7 @@ def parse_args() -> argparse.Namespace:
     download.add_argument("--close-excel-export", action=argparse.BooleanOptionalAction, default=True)
     download.add_argument("--screenshot", action="store_true")
     download.add_argument("--output-dir", default=str(DEFAULT_LOG_DIR))
+    download.add_argument("--dry-run", action="store_true", help="Print computed conditions without opening ICC.")
     download.set_defaults(func=run_xplatform_download)
 
     save = subparsers.add_parser("credential-save", help="Save the ICC password to Windows Credential Manager.")

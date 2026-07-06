@@ -725,10 +725,12 @@ def download_from_icc(args: argparse.Namespace, window: ReportWindow) -> Path:
             raise RuntimeError("ICC URL is required on first run. Pass --url or set ICC_URL.")
 
         select_document(page, args.document_name, timeout)
-        set_named_field(page, "START", "시작년주", [str(window.start_year), str(window.start_week)], timeout)
-        set_named_field(page, "END", "종료년주", [str(window.end_year), str(window.end_week)], timeout)
+        # Organization/division changes can refresh dependent defaults, so set
+        # the year-week fields last.
         set_named_field(page, "ORG", "조직", [args.org], timeout)
         set_named_field(page, "DIVISION", "구분", [args.division], timeout)
+        set_named_field(page, "START", "시작년주", [str(window.start_year), str(window.start_week)], timeout)
+        set_named_field(page, "END", "종료년주", [str(window.end_year), str(window.end_week)], timeout)
 
         click_text_button(page, args.search_text, timeout)
         wait_after_action(page, timeout)
