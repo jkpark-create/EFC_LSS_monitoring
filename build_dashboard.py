@@ -14,6 +14,12 @@ SOURCE_CSV = Path("DynamicList.CSV")
 OUTPUT_FILES = (Path("index.html"), Path("dashboard.html"))
 DATA_FILE = Path("data.json")
 SALES_SOURCE_JSON = Path(os.getenv("THREE_W_DATA_JSON", "../-3W bkg dashboard/dist/data.json"))
+SALES_ASSIGNMENT_CSV = Path(
+    os.getenv("SALESPERSON_ASSIGNMENT_CSV", "../-3W bkg dashboard/salesman.csv")
+)
+MIN_SALESPERSON_MATCH_RATE = float(
+    os.getenv("MIN_SALESPERSON_MATCH_RATE", "0.95")
+)
 SOURCE_ENCODINGS = ("cp949", "utf-8-sig", "utf-8")
 
 EFC_EXCLUDED_ORIGINS = {"", "CN", "KR", "JP", "US"}
@@ -63,6 +69,18 @@ def normalize_salesperson(value: object) -> str:
     return ", ".join(names)
 
 
+def decode_packed_cell(column: str, value: object, dictionaries: dict) -> object:
+    dictionary = dictionaries.get(column)
+    if (
+        isinstance(dictionary, list)
+        and isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value < len(dictionary)
+    ):
+        return dictionary[value]
+    return value
+
+
 def normalize_shipper_rows(value: object) -> tuple[Iterable[dict], int]:
     if isinstance(value, list):
         return (row for row in value if isinstance(row, dict)), len(value)
@@ -70,9 +88,19 @@ def normalize_shipper_rows(value: object) -> tuple[Iterable[dict], int]:
     if isinstance(value, dict):
         columns = value.get("c")
         rows = value.get("r")
+        dictionaries = value.get("d") or value.get("dicts") or {}
+        if not isinstance(dictionaries, dict):
+            dictionaries = {}
         if isinstance(columns, list) and isinstance(rows, list):
             return (
-                dict(zip(columns, row))
+                {
+                    column: decode_packed_cell(
+                        column,
+                        row[index] if index < len(row) else None,
+                        dictionaries,
+                    )
+                    for index, column in enumerate(columns)
+                }
                 for row in rows
                 if isinstance(row, list)
             ), len(rows)
@@ -80,7 +108,111 @@ def normalize_shipper_rows(value: object) -> tuple[Iterable[dict], int]:
     raise ValueError("Unsupported shipper data format in sales source JSON")
 
 
-def load_salesperson_lookup() -> tuple[dict[str, str], dict]:
+def assignment_source_encoding(path: Path) -> str:
+    for encoding in ("utf-8-sig", "cp949", "utf-8"):
+        try:
+            with path.open("r", encoding=encoding, newline="") as f:
+                headers = next(csv.reader(f), [])
+        except UnicodeDecodeError:
+            continue
+        if {"CUSTOMER_NO", "SALESMAN_NO"} <= set(headers):
+            return encoding
+    return "utf-8-sig"
+
+
+def salesperson_as_of() -> int:
+    configured = re.sub(r"\D", "", os.getenv("SALESPERSON_AS_OF", ""))
+    if len(configured) == 8:
+        return int(configured)
+    return int(dt.date.today().strftime("%Y%m%d"))
+
+
+def load_assignment_lookup(as_of: int) -> tuple[dict[str, str], dict]:
+    meta = {
+        "source": str(SALES_ASSIGNMENT_CSV),
+        "found": SALES_ASSIGNMENT_CSV.exists(),
+        "sourceRows": 0,
+        "activeRows": 0,
+        "mappingKeys": 0,
+        "duplicateKeys": 0,
+    }
+    if not SALES_ASSIGNMENT_CSV.exists():
+        return {}, meta
+
+    exact: dict[str, tuple[int, str]] = {}
+    by_country: dict[str, tuple[int, str]] = {}
+    generic: dict[str, tuple[int, str]] = {}
+    customer_salespeople: dict[str, set[str]] = {}
+    conflicting_keys: set[str] = set()
+
+    def put_latest(
+        bucket: dict[str, tuple[int, str]],
+        lookup_key: str,
+        start_date: int,
+        salesperson: str,
+    ) -> None:
+        current = bucket.get(lookup_key)
+        if current and current[1] != salesperson:
+            conflicting_keys.add(lookup_key)
+        if current is None or (start_date, salesperson) > current:
+            bucket[lookup_key] = (start_date, salesperson)
+
+    with SALES_ASSIGNMENT_CSV.open(
+        "r",
+        encoding=assignment_source_encoding(SALES_ASSIGNMENT_CSV),
+        newline="",
+    ) as f:
+        for row in csv.DictReader(f):
+            meta["sourceRows"] += 1
+            start_date = int(number(row.get("SALES_START_DATE")))
+            end_date = int(number(row.get("SALES_END_DATE")))
+            customer = key_code(row.get("CUSTOMER_NO"))
+            salesperson = normalize_salesperson(row.get("SALESMAN_NO"))
+            if not (start_date <= as_of <= end_date and customer and salesperson):
+                continue
+
+            meta["activeRows"] += 1
+            country = key_code(row.get("COUNTRY"))
+            port = key_code(row.get("PORT"))
+            if country and port:
+                put_latest(
+                    exact,
+                    f"E|{country}|{port}|{customer}",
+                    start_date,
+                    salesperson,
+                )
+            if country:
+                put_latest(
+                    by_country,
+                    f"C|{country}|{customer}",
+                    start_date,
+                    salesperson,
+                )
+            if not country and not port:
+                put_latest(
+                    generic,
+                    f"G|{customer}",
+                    start_date,
+                    salesperson,
+                )
+            customer_salespeople.setdefault(customer, set()).add(salesperson)
+
+    lookup = {
+        **{lookup_key: value[1] for lookup_key, value in exact.items()},
+        **{lookup_key: value[1] for lookup_key, value in by_country.items()},
+        **{lookup_key: value[1] for lookup_key, value in generic.items()},
+        **{
+            f"U|{customer}": next(iter(salespeople))
+            for customer, salespeople in customer_salespeople.items()
+            if len(salespeople) == 1
+        },
+    }
+    meta["mappingKeys"] = len(lookup)
+    meta["duplicateKeys"] = len(conflicting_keys)
+    return lookup, meta
+
+
+def load_three_w_lookup() -> tuple[dict[str, str], dict]:
     meta = {
         "source": str(SALES_SOURCE_JSON),
         "found": SALES_SOURCE_JSON.exists(),
@@ -116,11 +248,59 @@ def load_salesperson_lookup() -> tuple[dict[str, str], dict]:
             counter.items(),
             key=lambda item: (-item[1], -len(item[0].split(",")), item[0]),
         )[0][0]
-        lookup[key] = salesperson
+        lookup[f"P|{key}"] = salesperson
 
     meta["mappingKeys"] = len(lookup)
     meta["duplicateKeys"] = duplicate_keys
     return lookup, meta
+
+
+def load_salesperson_lookup() -> tuple[dict[str, str], dict]:
+    as_of = salesperson_as_of()
+    assignment_lookup, assignment_meta = load_assignment_lookup(as_of)
+    three_w_lookup, three_w_meta = load_three_w_lookup()
+    lookup = {**three_w_lookup, **assignment_lookup}
+    found = assignment_meta["found"] or three_w_meta["found"]
+    preferred_source = (
+        assignment_meta["source"] if assignment_meta["found"] else three_w_meta["source"]
+    )
+    meta = {
+        "source": preferred_source,
+        "found": found,
+        "asOf": str(as_of),
+        "sourceRows": assignment_meta["sourceRows"] + three_w_meta["sourceRows"],
+        "mappingKeys": len(lookup),
+        "duplicateKeys": (
+            assignment_meta["duplicateKeys"] + three_w_meta["duplicateKeys"]
+        ),
+        "assignment": assignment_meta,
+        "threeW": three_w_meta,
+    }
+    return lookup, meta
+
+
+def resolve_salesperson(
+    lookup: dict[str, str],
+    origin_country: object,
+    origin_port: object,
+    booking_shipper: object,
+) -> str:
+    country = key_code(origin_country)
+    port = key_code(origin_port)
+    customer = key_code(booking_shipper)
+    if not customer:
+        return ""
+    for lookup_key in (
+        f"E|{country}|{port}|{customer}",
+        f"C|{country}|{customer}",
+        f"G|{customer}",
+        f"U|{customer}",
+        f"P|{port}|{customer}",
+    ):
+        salesperson = lookup.get(lookup_key)
+        if salesperson:
+            return salesperson
+    return ""
 
 
 def efc_destination_rule(dest_country: str, dest_port: str) -> tuple[str, int, int] | None:
@@ -250,8 +430,17 @@ def read_rows() -> tuple[list[dict], dict]:
 
             booking_shipper = clean(row.get("booking shipper"))
             handling_consignee = clean(row.get("handling consignee"))
-            sales_key = f"{key_code(origin_port)}|{key_code(booking_shipper)}"
-            salesperson = salesperson_lookup.get(sales_key, "") if booking_shipper and origin_port else ""
+            sales_key = (
+                f"{key_code(origin_country)}|"
+                f"{key_code(origin_port)}|"
+                f"{key_code(booking_shipper)}"
+            )
+            salesperson = resolve_salesperson(
+                salesperson_lookup,
+                origin_country,
+                origin_port,
+                booking_shipper,
+            )
             if salesperson:
                 sales_matched_rows += 1
                 sales_matched_keys.add(sales_key)
@@ -317,6 +506,13 @@ def read_rows() -> tuple[list[dict], dict]:
             "unmatchedRows": sales_unmatched_rows,
             "matchedKeys": len(sales_matched_keys),
             "unmatchedKeys": len(sales_unmatched_keys),
+            "matchRate": round(
+                sales_matched_rows / (sales_matched_rows + sales_unmatched_rows),
+                4,
+            )
+            if sales_matched_rows + sales_unmatched_rows
+            else 0,
+            "minimumMatchRate": MIN_SALESPERSON_MATCH_RATE,
         },
     }
     return records, meta
@@ -2259,6 +2455,18 @@ def main() -> None:
         raise SystemExit(f"Missing source file: {SOURCE_CSV}")
 
     rows, meta = read_rows()
+    sales_mapping = meta["salesMapping"]
+    if not sales_mapping["found"]:
+        raise SystemExit(
+            "Missing salesperson mapping sources: "
+            f"{SALES_ASSIGNMENT_CSV} and {SALES_SOURCE_JSON}"
+        )
+    if sales_mapping["matchRate"] < MIN_SALESPERSON_MATCH_RATE:
+        raise SystemExit(
+            "Salesperson mapping coverage below deployment threshold: "
+            f"{sales_mapping['matchRate']:.2%} < "
+            f"{MIN_SALESPERSON_MATCH_RATE:.2%}"
+        )
     data = json.dumps({"rows": rows, "meta": meta}, ensure_ascii=False, separators=(",", ":"))
     data = data.replace("</", "<\\/")
     DATA_FILE.write_text(data, encoding="utf-8")

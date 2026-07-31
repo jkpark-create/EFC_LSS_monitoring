@@ -83,7 +83,8 @@ ICC 화면의 입력 컨트롤이 일반 HTML 입력이 아닌 커스텀 위젯�
 - 기대액은 `20갯수 * 20DRY tariff + 40갯수 * 40DRY tariff`입니다.
 - 징수율은 `실제 징수액 / 타리프 기대액`입니다.
 - Gap은 `실제 징수액 - 타리프 기대액`입니다. 음수는 `-$` shortfall(부족), 양수는 `+$` 초과징수로 표시합니다.
-- 영업사원은 `../-3W bkg dashboard/dist/data.json`의 `shipper` 데이터에서 `POL + Booking Shipper code` 기준으로 `Salesman_POR`를 매핑합니다. 다른 위치의 -3W 데이터 파일을 쓰려면 `THREE_W_DATA_JSON` 환경변수로 경로를 지정합니다.
+- 영업사원은 `../-3W bkg dashboard/salesman.csv`의 실행일 기준 활성 배정을 우선 적용하고, `../-3W bkg dashboard/dist/data.json`의 `shipper` 데이터를 보조 매핑으로 사용합니다. 다른 위치를 쓰려면 각각 `SALESPERSON_ASSIGNMENT_CSV`, `THREE_W_DATA_JSON` 환경변수로 지정합니다.
+- 영업사원 매핑률이 기본 95% 미만이면 빌드를 중단하여 전 행 `미지정` 상태의 배포를 방지합니다. 운영상 기준 변경이 필요할 때만 `MIN_SALESPERSON_MATCH_RATE`를 조정합니다.
 - `20 o/f`와 `40 o/f`가 모두 빈칸이거나 0인 행은 모수에서 제외합니다.
 - 원본 파일의 마지막 합계 행은 자동 제외합니다.
 - 원본에는 `실적년/실적월/실적년주차`만 있고 ETD POL 일자가 없어, 효력일 기준의 행 단위 제외는 적용하지 않았습니다.
