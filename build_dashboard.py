@@ -524,6 +524,7 @@ HTML = r"""<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>EFC/LSS Collection Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <style>
     :root {
       --bg: #f6f7f4;
