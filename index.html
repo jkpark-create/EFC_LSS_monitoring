@@ -906,7 +906,8 @@
             ? ` · 영업사원 ${num(meta.salesMapping.matchedRows)} rows 매핑`
             : " · 영업사원 매핑 없음";
           const updated = formatKstDate(meta.updatedAt || meta.sourceModifiedAt, "ko-KR");
-          const updatedText = updated ? `업데이트 기준 ${updated} · ` : "";
+          const built = formatKstDate(meta.builtAt, "ko-KR");
+          const updatedText = `원천 기준 ${updated || "미확인"} · 정상 자료 생성 ${built || "미확인"} · `;
           return `${updatedText}${meta.source || "data.json"} · 대상 ${num(meta.targetRows)} rows · no-O/F 제외 ${num(meta.skippedNoFreightRows)} rows${sales}`;
         },
         filters: {
@@ -973,7 +974,8 @@
             ? ` · ${num(meta.salesMapping.matchedRows)} rows sales-mapped`
             : " · no salesperson mapping";
           const updated = formatKstDate(meta.updatedAt || meta.sourceModifiedAt, "en-US");
-          const updatedText = updated ? `Updated ${updated} · ` : "";
+          const built = formatKstDate(meta.builtAt, "en-US");
+          const updatedText = `Source as of ${updated || "Unknown"} · Successful data build ${built || "Unknown"} · `;
           return `${updatedText}${meta.source || "data.json"} · ${num(meta.targetRows)} target rows · ${num(meta.skippedNoFreightRows)} no-O/F rows skipped${sales}`;
         },
         filters: {
@@ -1048,19 +1050,22 @@
     }
 
     function usd(value) {
-      const rounded = Math.round(value || 0);
+      if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+      const rounded = Math.round(value);
       const sign = rounded < 0 ? "-" : "";
       return sign + "$" + Math.abs(rounded).toLocaleString("en-US");
     }
 
     function signedUsd(value) {
-      const rounded = Math.round(value || 0);
+      if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+      const rounded = Math.round(value);
       const sign = rounded > 0 ? "+" : rounded < 0 ? "-" : "";
       return sign + "$" + Math.abs(rounded).toLocaleString("en-US");
     }
 
     function num(value) {
-      return Math.round(value || 0).toLocaleString("en-US");
+      if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+      return Math.round(value).toLocaleString("en-US");
     }
 
     function formatKstDate(value, locale) {
@@ -1487,6 +1492,32 @@
       if (reload) location.reload();
     }
 
+    function validateDashboardPayload(payload) {
+      if (!payload || !Array.isArray(payload.rows) || !payload.meta) {
+        throw new Error("Invalid source: rows and metadata are required");
+      }
+      if (!Number.isInteger(payload.meta.targetRows) || payload.meta.targetRows < 0 || payload.meta.targetRows !== payload.rows.length) {
+        throw new Error("Invalid source: target row count does not match the published data");
+      }
+      const sourceDate = payload.meta.sourceModifiedAt || payload.meta.updatedAt;
+      if (!sourceDate || !Number.isFinite(Date.parse(sourceDate))) {
+        throw new Error("Invalid source: source timestamp is missing");
+      }
+      const fields = ["qty20", "qty40", "teu", "expected", "actual", "gap"];
+      for (let index = 0; index < payload.rows.length; index += 1) {
+        const row = payload.rows[index];
+        for (const field of fields) {
+          if (!row || typeof row[field] !== "number" || !Number.isFinite(row[field])) {
+            throw new Error(`Invalid source: row ${index + 1} field ${field} is missing or not numeric`);
+          }
+        }
+        if (Math.abs(row.actual - row.expected - row.gap) > 0.02) {
+          throw new Error(`Invalid source: row ${index + 1} collection gap does not reconcile`);
+        }
+      }
+      return payload;
+    }
+
     async function loadData() {
       const loading = document.getElementById("loading");
       loading.classList.remove("error");
@@ -1496,9 +1527,9 @@
       try {
         const response = await fetch(`${DATA_URL}?t=${Date.now()}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json();
-        rows = payload.rows || [];
-        meta = payload.meta || {};
+        const payload = validateDashboardPayload(await response.json());
+        rows = payload.rows;
+        meta = payload.meta;
         loading.style.display = "none";
       } catch (error) {
         loading.classList.add("error");
